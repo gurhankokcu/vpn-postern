@@ -4,23 +4,14 @@ import { createServer } from 'node:https'
 import { join } from 'node:path'
 import { clear, expiredCookie, fail, locked, sessionCookie, valid, verify } from './auth.ts'
 import { dir, load } from './data.ts'
+import { loginPage, nodesPage, notFoundPage } from './pages.ts'
 
 const tls = {
   key: readFileSync(join(dir, 'tls.key')),
   cert: readFileSync(join(dir, 'tls.crt')),
 }
 
-function page(body: string) {
-  return `<!doctype html><meta charset="utf-8"><title>VPN Postern</title>${body}`
-}
-
-function loginPage(message = '') {
-  return page(`<form method="post" action="/login">${message && `<p>${message}</p>`}<input type="password" name="password" autofocus><button>Log in</button></form>`)
-}
-
-function homePage() {
-  return page(`<p>Logged in</p><form method="post" action="/logout"><button>Log out</button></form>`)
-}
+const css = readFileSync(join(import.meta.dirname, 'style.css'))
 
 async function form(req: IncomingMessage) {
   let body = ''
@@ -33,8 +24,8 @@ async function form(req: IncomingMessage) {
   return new URLSearchParams(body)
 }
 
-function send(res: ServerResponse, status: number, html: string) {
-  res.writeHead(status, { 'content-type': 'text/html; charset=utf-8' }).end(html)
+function send(res: ServerResponse, status: number, body: string | Buffer, type = 'text/html') {
+  res.writeHead(status, { 'content-type': `${type}; charset=utf-8` }).end(body)
 }
 
 function redirect(res: ServerResponse, location: string, cookie?: string) {
@@ -45,6 +36,9 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
   const ip = req.socket.remoteAddress ?? ''
   const route = `${req.method} ${req.url?.split('?')[0]}`
 
+  if (route === 'GET /style.css') {
+    return send(res, 200, css, 'text/css')
+  }
   if (route === 'GET /login') {
     return send(res, 200, loginPage())
   }
@@ -68,9 +62,9 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     return redirect(res, '/login', expiredCookie())
   }
   if (route === 'GET /') {
-    return send(res, 200, homePage())
+    return send(res, 200, nodesPage(load().nodes))
   }
-  send(res, 404, page('<p>Not found.</p>'))
+  send(res, 404, notFoundPage())
 }
 
 createServer(tls, (req, res) => {
