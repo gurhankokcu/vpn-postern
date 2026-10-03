@@ -1,0 +1,29 @@
+FROM ubuntu:24.04
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      systemd systemd-sysv dbus openssh-server sudo iproute2 iputils-ping curl ca-certificates
+
+# What VPN Postern installs waits in apt's cache, so `apt-get install` works
+# with no internet and still finds it missing, as on a fresh droplet.
+RUN rm /etc/apt/apt.conf.d/docker-clean \
+ && apt-get install -y --download-only wireguard-tools nftables qrencode
+
+# Node.js does not come from apt, so it cannot wait in the cache; it is here already.
+COPY --from=node:24-slim /usr/local/bin/node /usr/local/bin/
+
+RUN rm /etc/ssh/ssh_host_*
+
+# Each droplet makes its own host keys on first boot, ahead of sshd's config check.
+COPY <<'EOF' /etc/systemd/system/ssh.service.d/keygen.conf
+[Service]
+ExecStartPre=
+ExecStartPre=/usr/bin/ssh-keygen -A
+ExecStartPre=/usr/sbin/sshd -t
+EOF
+
+COPY --chmod=755 net.sh /usr/local/bin/
+
+ENV container=docker
+STOPSIGNAL SIGRTMIN+3
+ENTRYPOINT ["net.sh"]
+CMD ["/sbin/init"]

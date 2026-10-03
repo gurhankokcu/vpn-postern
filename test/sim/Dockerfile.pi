@@ -1,0 +1,28 @@
+FROM debian:trixie
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      systemd systemd-sysv dbus openssh-server sudo iproute2 iputils-ping curl ca-certificates
+
+# What VPN Postern installs waits in apt's cache, so `apt-get install` works
+# with no internet and still finds it missing, as on a freshly flashed Pi.
+RUN rm /etc/apt/apt.conf.d/docker-clean \
+ && apt-get install -y --download-only wireguard-tools nftables
+
+RUN rm /etc/ssh/ssh_host_* \
+ && useradd -m -s /bin/bash -G sudo pi \
+ && echo 'pi ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/010_pi-nopasswd
+
+# Each Pi makes its own host keys on first boot, ahead of sshd's config check.
+COPY <<'EOF' /etc/systemd/system/ssh.service.d/keygen.conf
+[Service]
+ExecStartPre=
+ExecStartPre=/usr/bin/ssh-keygen -A
+ExecStartPre=/usr/sbin/sshd -t
+EOF
+
+COPY --chmod=755 net.sh /usr/local/bin/
+
+ENV container=docker
+STOPSIGNAL SIGRTMIN+3
+ENTRYPOINT ["net.sh"]
+CMD ["/sbin/init"]

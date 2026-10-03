@@ -1,0 +1,240 @@
+name: vpn-postern
+
+x-machine: &machine
+  image: vpn-postern
+  pull_policy: never
+  # As PID 1, sleep and node ignore SIGTERM; an init lets them stop at once.
+  init: true
+  cap_add: [NET_ADMIN]
+  # Outside names never resolve; the hub and example.com, by their public addresses.
+  dns: 127.0.0.1
+  extra_hosts:
+    hub: 172.30.0.10
+    example.com: 172.30.0.60
+
+x-ready: &ready
+  interval: 1s
+  retries: 30
+
+x-router: &router
+  <<: *machine
+  command: router.sh
+  sysctls:
+    net.ipv4.ip_forward: 1
+
+x-web: &web
+  <<: *machine
+  command: web.ts
+  healthcheck:
+    <<: *ready
+    test: curl -fs http://127.0.0.1
+
+# A full OS with systemd as init, as fresh as the day it was set up.
+x-os: &os
+  <<: *machine
+  init: false
+  privileged: true
+  tmpfs: [/run, /run/lock]
+  # Forwarding starts off, as on a fresh machine.
+  sysctls:
+    net.ipv4.ip_forward: 0
+  healthcheck:
+    <<: *ready
+    test: ssh-keyscan -T 1 127.0.0.1
+
+x-pi: &pi
+  <<: *os
+  image: vpn-postern-pi
+
+# Docker gives a container a new MAC on every start, but a real machine keeps
+# its own, so each pins one: 02:00:00:00, then its network as in 172.30.N, then
+# its host number.
+services:
+  hub:
+    <<: *os
+    container_name: hub
+    hostname: hub
+    build:
+      context: .
+      dockerfile: Dockerfile.hub
+    image: vpn-postern-hub
+    # The release to install, as if downloaded.
+    volumes:
+      - ../..:/mnt/postern:ro
+    # The admin UI, so a browser on the Mac can reach it.
+    ports:
+      - 127.0.0.1:8443:8443
+    networks:
+      internet:
+        ipv4_address: 172.30.0.10
+        mac_address: 02:00:00:00:00:0a
+
+  home-router:
+    <<: *router
+    container_name: home-router
+    hostname: home-router
+    environment:
+      LAN: 192.168.1.0/24
+      NAT: endpoint-independent
+    networks:
+      internet:
+        ipv4_address: 172.30.0.20
+        interface_name: wan
+        mac_address: 02:00:00:00:00:14
+      home:
+        interface_name: lan
+        mac_address: 02:00:00:00:01:01
+
+  work-router:
+    <<: *router
+    container_name: work-router
+    hostname: work-router
+    environment:
+      LAN: 192.168.1.0/24
+      NAT: endpoint-independent
+    networks:
+      internet:
+        ipv4_address: 172.30.0.30
+        interface_name: wan
+        mac_address: 02:00:00:00:00:1e
+      work:
+        interface_name: lan
+        mac_address: 02:00:00:00:02:01
+
+  carrier-gw:
+    <<: *router
+    container_name: carrier-gw
+    hostname: carrier-gw
+    environment:
+      LAN: 100.64.0.0/24
+      NAT: symmetric
+    networks:
+      internet:
+        ipv4_address: 172.30.0.40
+        interface_name: wan
+        mac_address: 02:00:00:00:00:28
+      carrier:
+        interface_name: lan
+        mac_address: 02:00:00:00:03:01
+
+  tablet:
+    <<: *machine
+    container_name: tablet
+    # Compose builds a shared image once per service that names a build, and
+    # parallel builds of one tag collide.
+    build: .
+    hostname: tablet
+    networks:
+      internet:
+        ipv4_address: 172.30.0.50
+        mac_address: 02:00:00:00:00:32
+
+  example.com:
+    <<: *web
+    container_name: example.com
+    hostname: example.com
+    environment:
+      SITE: example.com
+    networks:
+      internet:
+        ipv4_address: 172.30.0.60
+        mac_address: 02:00:00:00:00:3c
+
+  home-pi:
+    <<: *pi
+    container_name: home-pi
+    # Compose builds a shared image once per service that names a build, and
+    # parallel builds of one tag collide.
+    build:
+      context: .
+      dockerfile: Dockerfile.pi
+    hostname: home-pi
+    environment:
+      ADDRESS: 192.168.1.10/24
+    networks:
+      home:
+        mac_address: 02:00:00:00:01:0a
+
+  laptop:
+    <<: *machine
+    container_name: laptop
+    hostname: laptop
+    environment:
+      ADDRESS: 192.168.1.20/24
+    networks:
+      home:
+        mac_address: 02:00:00:00:01:14
+
+  camera:
+    <<: *web
+    container_name: camera
+    hostname: camera
+    environment:
+      ADDRESS: 192.168.1.30/24
+      SITE: camera
+    networks:
+      home:
+        mac_address: 02:00:00:00:01:1e
+
+  work-pi:
+    <<: *pi
+    container_name: work-pi
+    hostname: work-pi
+    environment:
+      ADDRESS: 192.168.1.10/24
+    networks:
+      work:
+        mac_address: 02:00:00:00:02:0a
+
+  desktop:
+    <<: *machine
+    container_name: desktop
+    hostname: desktop
+    environment:
+      ADDRESS: 192.168.1.20/24
+    networks:
+      work:
+        mac_address: 02:00:00:00:02:14
+
+  printer:
+    <<: *web
+    container_name: printer
+    hostname: printer
+    environment:
+      ADDRESS: 192.168.1.30/24
+      SITE: printer
+    networks:
+      work:
+        mac_address: 02:00:00:00:02:1e
+
+  phone:
+    <<: *machine
+    container_name: phone
+    hostname: phone
+    environment:
+      ADDRESS: 100.64.0.20/24
+    networks:
+      carrier:
+        mac_address: 02:00:00:00:03:14
+
+networks:
+  internet:
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+  # Docker refuses two networks with one subnet, so a LAN's subnet here is a
+  # placeholder; its machines take their real addresses as they boot.
+  home:
+    ipam:
+      config:
+        - subnet: 172.30.1.0/24
+  work:
+    ipam:
+      config:
+        - subnet: 172.30.2.0/24
+  carrier:
+    ipam:
+      config:
+        - subnet: 172.30.3.0/24

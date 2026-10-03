@@ -9,7 +9,10 @@
     "check": "tsc",
     "cert": "node src/cert.ts",
     "set-password": "node src/set-password.ts",
-    "server": "node src/server.ts"
+    "server": "node src/server.ts",
+    "sim:up": "docker compose -f test/sim/compose.yaml up -d --build --wait",
+    "sim:verify": "node test/sim/verify.ts",
+    "sim:down": "docker compose -f test/sim/compose.yaml down"
   },
   "devDependencies": {
     "@types/node": "^24.19.0",
