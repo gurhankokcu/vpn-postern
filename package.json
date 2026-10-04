@@ -7,6 +7,7 @@
   },
   "scripts": {
     "check": "tsc",
+    "test": "node --test --experimental-test-coverage --test-coverage-include='src/**' 'src/*.test.ts'",
     "cert": "node src/cert.ts",
     "set-password": "node src/set-password.ts",
     "server": "node src/server.ts",

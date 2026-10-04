@@ -6,11 +6,6 @@ import { clear, expiredCookie, fail, locked, sessionCookie, valid, verify } from
 import { dir, load } from './data.ts'
 import { loginPage, nodesPage, notFoundPage } from './pages.ts'
 
-const tls = {
-  key: readFileSync(join(dir, 'tls.key')),
-  cert: readFileSync(join(dir, 'tls.crt')),
-}
-
 const css = readFileSync(join(import.meta.dirname, 'style.css'))
 
 async function form(req: IncomingMessage) {
@@ -67,9 +62,17 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
   send(res, 404, notFoundPage())
 }
 
-createServer(tls, (req, res) => {
+export function listener(req: IncomingMessage, res: ServerResponse) {
   handle(req, res).catch((error) => {
     console.error(error)
     res.destroy()
   })
-}).listen(8443)
+}
+
+if (import.meta.main) {
+  const tls = {
+    key: readFileSync(join(dir, 'tls.key')),
+    cert: readFileSync(join(dir, 'tls.crt')),
+  }
+  createServer(tls, listener).listen(8443)
+}
