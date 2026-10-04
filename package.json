@@ -13,7 +13,8 @@
     "server": "node src/server.ts",
     "sim:up": "docker compose -f test/sim/compose.yaml up -d --build --wait",
     "sim:verify": "node test/sim/verify.ts",
-    "sim:down": "docker compose -f test/sim/compose.yaml down"
+    "sim:down": "docker compose -f test/sim/compose.yaml down",
+    "e2e": "npm run sim:down && npm run sim:up && node --test --test-concurrency=1 'test/e2e/*.test.ts'"
   },
   "devDependencies": {
     "@types/node": "^24.19.0",
