@@ -10,6 +10,10 @@ export function keypair() {
   return { privateKey, publicKey: run('wg', ['pubkey'], privateKey) }
 }
 
+export function hubKey() {
+  return run('wg', ['show', 'postern0', 'public-key'])
+}
+
 export function addPeer(node: Node) {
   run('wg', ['set', 'postern0', 'peer', node.publicKey, 'allowed-ips', `${address(node)}/32`])
   run('wg-quick', ['save', 'postern0'])

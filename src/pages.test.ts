@@ -26,7 +26,7 @@ test('login page has no log out button', () => {
 })
 
 test('nodes page with no nodes says so', () => {
-  const html = nodesPage([])
+  const html = nodesPage({ nodes: [], joins: [], host: 'hub:8443', pin: 'pin' })
   assert.match(html, /<title>Nodes · VPN Postern<\/title>/)
   assert.match(html, /<body>/)
   assert.match(html, /0 total/)
@@ -35,7 +35,7 @@ test('nodes page with no nodes says so', () => {
 })
 
 test('nodes page lists each node with its address and port', () => {
-  const html = nodesPage([{ name: 'home', n: 1, publicKey: 'key' }, { name: 'work', n: 2, publicKey: 'key' }])
+  const html = nodesPage({ nodes: [{ name: 'home', n: 1, publicKey: 'key' }, { name: 'work', n: 2, publicKey: 'key' }], joins: [], host: 'hub:8443', pin: 'pin' })
   assert.match(html, /2 total/)
   assert.doesNotMatch(html, /No nodes yet/)
   assert.match(html, /<td><b>home<\/b><\/td>\n<td class="mono">10\.99\.0\.1<\/td>\n<td class="mono">51821<\/td>/)
@@ -43,27 +43,46 @@ test('nodes page lists each node with its address and port', () => {
 })
 
 test('nodes page escapes node names', () => {
-  const html = nodesPage([{ name: `<script>"&'</script>`, n: 1, publicKey: 'key' }])
+  const html = nodesPage({ nodes: [{ name: `<script>"&'</script>`, n: 1, publicKey: 'key' }], joins: [], host: 'hub:8443', pin: 'pin' })
   assert.match(html, /<b>&#60;script&#62;&#34;&#38;&#39;&#60;\/script&#62;<\/b>/)
   assert.doesNotMatch(html, /<script>/)
 })
 
 test('nodes page has a form to add a node by name', () => {
-  assert.match(nodesPage([]), /<form class="add" method="post" action="\/nodes">\n<span class="field"><input name="nodeName" [^>]*required><\/span>\n<button class="btn primary">Add node<\/button>/)
+  assert.match(nodesPage({ nodes: [], joins: [], host: 'hub:8443', pin: 'pin' }), /<form class="add" method="post" action="\/nodes">\n<span class="field"><input name="nodeName" [^>]*required><\/span>\n<button class="btn primary">Add node<\/button>/)
 })
 
 test('nodes page shows a message only when given one', () => {
-  assert.doesNotMatch(nodesPage([]), /class="note"/)
-  assert.match(nodesPage([], 'Bad name.'), /<main><div class="note">Bad name\.<\/div>\n<section class="card">/)
+  assert.doesNotMatch(nodesPage({ nodes: [], joins: [], host: 'hub:8443', pin: 'pin' }), /class="note"/)
+  assert.match(nodesPage({ nodes: [], joins: [], host: 'hub:8443', pin: 'pin', message: 'Bad name.' }), /<main><div class="note">Bad name\.<\/div>\n<section class="card">/)
 })
 
 test('nodes page fills the form with the name given, escaped', () => {
-  assert.doesNotMatch(nodesPage([]), /value=/)
-  assert.match(nodesPage([], 'Bad name.', `"><b>&'`), /<input name="nodeName" value="&#34;&#62;&#60;b&#62;&#38;&#39;" placeholder/)
+  assert.doesNotMatch(nodesPage({ nodes: [], joins: [], host: 'hub:8443', pin: 'pin' }), /value=/)
+  assert.match(nodesPage({ nodes: [], joins: [], host: 'hub:8443', pin: 'pin', message: 'Bad name.', nodeName: `"><b>&'` }), /<input name="nodeName" value="&#34;&#62;&#60;b&#62;&#38;&#39;" placeholder/)
+})
+
+test('nodes page shows the pinned join command under a node waiting to join', () => {
+  const nodes = [{ name: 'home', n: 2, publicKey: 'key' }, { name: 'work', n: 3, publicKey: 'key' }]
+  const joins = [{ token: 'abc', n: 2, privateKey: 'key', expires: Date.now() + 60_000 }]
+  const html = nodesPage({ nodes, joins, host: 'hub:8443', pin: 'pin=' })
+  assert.match(html, /<td class="mono">51822<\/td>\n<\/tr>\n<tr class="join"><td colspan="3"><code class="mono">curl -fsSk --pinnedpubkey sha256\/\/pin= https:\/\/hub:8443\/join\/abc \| sudo sh<\/code><\/td><\/tr>/)
+  assert.equal(html.match(/class="join"/g)?.length, 1)
+})
+
+test('nodes page hides an expired join', () => {
+  const joins = [{ token: 'abc', n: 2, privateKey: 'key', expires: Date.now() - 1 }]
+  assert.doesNotMatch(nodesPage({ nodes: [{ name: 'home', n: 2, publicKey: 'key' }], joins, host: 'hub:8443', pin: 'pin' }), /class="join"/)
+})
+
+test('nodes page escapes the host in the join command', () => {
+  const joins = [{ token: 'abc', n: 2, privateKey: 'key', expires: Date.now() + 60_000 }]
+  const html = nodesPage({ nodes: [{ name: 'home', n: 2, publicKey: 'key' }], joins, host: '"><b>', pin: 'pin' })
+  assert.match(html, /https:\/\/&#34;&#62;&#60;b&#62;\/join\/abc/)
 })
 
 test('signed-in pages have a log out button', () => {
-  for (const html of [nodesPage([]), notFoundPage()]) {
+  for (const html of [nodesPage({ nodes: [], joins: [], host: 'hub:8443', pin: 'pin' }), notFoundPage()]) {
     assert.match(html, /<form method="post" action="\/logout"><button class="btn ghost">Log out<\/button><\/form>/)
   }
 })

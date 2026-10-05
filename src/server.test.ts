@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, before, beforeEach, test } from 'node:test'
 
-process.env.POSTERN_DIR = mkdtempSync(join(tmpdir(), 'postern-'))
-process.env.PATH = `${join(import.meta.dirname, '..', 'test', 'bin')}:${process.env.PATH}`
+const dir = mkdtempSync(join(tmpdir(), 'postern-'))
+process.env.POSTERN_DIR = dir
+process.env.PATH = `${join(import.meta.dirname, '..', 'dev', 'bin')}:${process.env.PATH}`
+execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-subj', '/CN=test', '-keyout', join(dir, 'tls.key'), '-out', join(dir, 'tls.crt')], { stdio: 'ignore' })
+writeFileSync(join(dir, 'id_ed25519.pub'), 'ssh-ed25519 AAAAhub postern\n')
 const { clear, hash } = await import('./auth.ts')
 const { load, save } = await import('./data.ts')
 const { listener } = await import('./server.ts')
@@ -28,7 +32,7 @@ after(() => {
 })
 
 beforeEach(() => {
-  save({ password: hash(password), nodes })
+  save({ password: hash(password), nodes, joins: [] })
   clear('127.0.0.1')
 })
 
@@ -89,7 +93,7 @@ test('a login without a password is refused', async () => {
 })
 
 test('no password is right before one is set', async () => {
-  save({ password: '', nodes })
+  save({ password: '', nodes, joins: [] })
   assert.equal((await login('password=')).status, 401)
   assert.equal((await login(`password=${password}`)).status, 401)
 })
@@ -133,10 +137,45 @@ test('home lists the nodes to a signed-in admin', async () => {
 
 test('home reads the nodes afresh on every request', async () => {
   const cookie = await session()
-  save({ password: hash(password), nodes: [{ name: 'work', n: 2, publicKey: 'key' }] })
+  save({ password: hash(password), nodes: [{ name: 'work', n: 2, publicKey: 'key' }], joins: [] })
   const html = await (await request('/', { headers: { cookie } })).text()
   assert.match(html, /<b>work<\/b>/)
   assert.doesNotMatch(html, /<b>home<\/b>/)
+})
+
+test('home shows the pinned join command with the host it was reached at', async () => {
+  save({ password: hash(password), nodes, joins: [{ token: 'abc', n: 1, privateKey: 'key', expires: Date.now() + 60_000 }] })
+  const html = await (await request('/', { headers: { cookie: await session() } })).text()
+  const pin = execFileSync('sh', ['-c', `openssl x509 -in ${join(dir, 'tls.crt')} -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | base64`], { encoding: 'utf8' }).trim()
+  assert.ok(html.includes(`curl -fsSk --pinnedpubkey sha256//${pin} https://${new URL(base).host}/join/abc | sudo sh`))
+})
+
+test('a join command needs no session and gets the script once', async () => {
+  save({ password: hash(password), nodes, joins: [{ token: 'abc', n: 2, privateKey: 'nodeprivate', expires: Date.now() + 60_000 }] })
+  const res = await request('/join/abc')
+  assert.equal(res.status, 200)
+  assert.equal(res.headers.get('content-type'), 'text/plain; charset=utf-8')
+  const script = await res.text()
+  assert.match(script, /^Address = 10\.99\.0\.2\/32\nPrivateKey = nodeprivate$/m)
+  assert.match(script, /^PublicKey = hubpublic\nEndpoint = 127\.0\.0\.1:51820$/m)
+  assert.match(script, /^    echo 'ssh-ed25519 AAAAhub postern' >> \/root\/\.ssh\/authorized_keys$/m)
+  assert.equal((await request('/join/abc')).status, 404)
+  assert.deepEqual(load().joins, [])
+})
+
+test('an unknown join command runs no wg', async () => {
+  rmSync(join(dir, 'wg.log'), { force: true })
+  assert.equal((await request('/join/missing')).status, 404)
+  assert.equal(existsSync(join(dir, 'wg.log')), false)
+})
+
+test('an unknown or expired join command is not found, with no login redirect', async () => {
+  save({ password: hash(password), nodes, joins: [{ token: 'old', n: 2, privateKey: 'key', expires: Date.now() - 1 }] })
+  for (const path of ['/join/old', '/join/missing', '/join/']) {
+    const res = await request(path)
+    assert.equal(res.status, 404)
+    assert.equal(await res.text(), 'This join command is used or expired.\n')
+  }
 })
 
 function add(cookie: string, body: string) {
@@ -152,6 +191,7 @@ test('adding a node saves it and goes home', async () => {
   assert.equal(res.status, 303)
   assert.equal(res.headers.get('location'), '/')
   assert.deepEqual(load().nodes.map((node) => [node.name, node.n]), [['home', 1], ['Mum and Dad Pi', 2]])
+  assert.deepEqual(load().joins.map((join) => join.n), [2])
 })
 
 test('a node name against the rule is refused with a note, adding nothing', async () => {
@@ -180,7 +220,7 @@ test('a node name already in use, in any case, is refused with a note, adding no
 
 test('a node beyond the last address is refused with a note, adding nothing', async () => {
   const full = Array.from({ length: 253 }, (_, i) => ({ name: `node${i + 2}`, n: i + 2, publicKey: 'key' }))
-  save({ password: hash(password), nodes: full })
+  save({ password: hash(password), nodes: full, joins: [] })
   const res = await add(await session(), 'nodeName=extra')
   assert.equal(res.status, 409)
   const html = await res.text()
@@ -190,12 +230,12 @@ test('a node beyond the last address is refused with a note, adding nothing', as
 })
 
 test('a password under 12 characters is refused', async () => {
-  save({ password: hash('x'.repeat(11)), nodes })
+  save({ password: hash('x'.repeat(11)), nodes, joins: [] })
   assert.equal((await login(`password=${'x'.repeat(11)}`)).status, 401)
 })
 
 test('a password over 256 characters is refused', async () => {
-  save({ password: hash('x'.repeat(257)), nodes })
+  save({ password: hash('x'.repeat(257)), nodes, joins: [] })
   assert.equal((await login(`password=${'x'.repeat(257)}`)).status, 401)
 })
 

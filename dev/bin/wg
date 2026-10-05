@@ -4,4 +4,5 @@ echo "wg $*" >> "$POSTERN_DIR/wg.log"
 case $1 in
   genkey) echo "private$(wc -l < "$POSTERN_DIR/wg.log" | tr -d ' ')" ;;
   pubkey) sed 's/^private/public/' ;;
+  show) echo 'hubpublic' ;;
 esac

@@ -10,7 +10,7 @@
     "test": "node --test --experimental-test-coverage --test-coverage-include='src/**' 'src/*.test.ts'",
     "cert": "node src/cert.ts",
     "set-password": "node src/set-password.ts",
-    "server": "PATH=test/bin:$PATH POSTERN_DIR=.dev node src/server.ts",
+    "server": "PATH=dev/bin:$PATH POSTERN_DIR=.dev node src/server.ts",
     "sim:up": "docker compose -f test/sim/compose.yaml up -d --build --wait",
     "sim:verify": "node test/sim/verify.ts",
     "sim:down": "docker compose -f test/sim/compose.yaml down",

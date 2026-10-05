@@ -2,7 +2,8 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { join } from 'node:path'
 
 export type Node = { name: string; n: number; publicKey: string }
-export type Data = { password: string; nodes: Node[] }
+export type Join = { token: string; n: number; privateKey: string; expires: number }
+export type Data = { password: string; nodes: Node[]; joins: Join[] }
 
 export const dir = process.env.POSTERN_DIR ?? '.dev'
 
@@ -12,7 +13,7 @@ const file = join(dir, 'data.json')
 
 export function load(): Data {
   const stored = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {}
-  return { password: '', nodes: [], ...stored }
+  return { password: '', nodes: [], joins: [], ...stored }
 }
 
 export function save(data: Data) {
@@ -20,10 +21,10 @@ export function save(data: Data) {
   renameSync(`${file}.tmp`, file)
 }
 
-export function address(node: Node) {
+export function address(node: Pick<Node, 'n'>) {
   return `10.99.0.${node.n}`
 }
 
-export function port(node: Node) {
+export function port(node: Pick<Node, 'n'>) {
   return 51820 + node.n
 }

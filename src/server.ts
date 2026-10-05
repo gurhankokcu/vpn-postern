@@ -1,3 +1,4 @@
+import { createHash, X509Certificate } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createServer } from 'node:https'
@@ -5,8 +6,10 @@ import { join } from 'node:path'
 import { clear, expiredCookie, fail, locked, sessionCookie, valid, verify } from './auth.ts'
 import { dir, load } from './data.ts'
 import { field } from './fields.ts'
-import { addNode } from './nodes.ts'
+import { joinScript } from './join.ts'
+import { addNode, dropJoin, findJoin } from './nodes.ts'
 import { loginPage, nodesPage, notFoundPage } from './pages.ts'
+import { hubKey } from './wg.ts'
 
 const css = readFileSync(join(import.meta.dirname, 'style.css'))
 
@@ -29,8 +32,14 @@ function redirect(res: ServerResponse, location: string, cookie?: string) {
   res.writeHead(303, cookie ? { location, 'set-cookie': cookie } : { location }).end()
 }
 
-function home(message = '', nodeName = '') {
-  return nodesPage(load().nodes, message, nodeName)
+function pin() {
+  const key = new X509Certificate(readFileSync(join(dir, 'tls.crt'))).publicKey.export({ type: 'spki', format: 'der' })
+  return createHash('sha256').update(key).digest('base64')
+}
+
+function home(req: IncomingMessage, message = '', nodeName = '') {
+  const { nodes, joins } = load()
+  return nodesPage({ nodes, joins, host: req.headers.host ?? '', pin: pin(), message, nodeName })
 }
 
 async function handle(req: IncomingMessage, res: ServerResponse) {
@@ -55,6 +64,18 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     clear(ip)
     return redirect(res, '/', sessionCookie())
   }
+  if (route.startsWith('GET /join/')) {
+    const token = route.slice('GET /join/'.length)
+    const found = findJoin(token)
+    if (!found) {
+      return send(res, 404, 'This join command is used or expired.\n', 'text/plain')
+    }
+    const host = (req.headers.host ?? '').replace(/:\d+$/, '')
+    const sshKey = readFileSync(join(dir, 'id_ed25519.pub'), 'utf8').trim()
+    const script = joinScript(found, { host, publicKey: hubKey(), sshKey })
+    dropJoin(token)
+    return send(res, 200, script, 'text/plain')
+  }
 
   if (!valid(req.headers.cookie)) {
     return redirect(res, '/login')
@@ -64,20 +85,20 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     return redirect(res, '/login', expiredCookie())
   }
   if (route === 'GET /') {
-    return send(res, 200, home())
+    return send(res, 200, home(req))
   }
   if (route === 'POST /nodes') {
     const params = await form(req)
     const name = field(params, 'nodeName')
     if (name === null) {
-      return send(res, 400, home('A node name is 1 to 32 letters, digits, - or _, with single spaces between words.', params.get('nodeName') ?? ''))
+      return send(res, 400, home(req, 'A node name is 1 to 32 letters, digits, - or _, with single spaces between words.', params.get('nodeName') ?? ''))
     }
     const result = addNode(name)
     if (result === 'taken') {
-      return send(res, 409, home('Another node already has that name.', name))
+      return send(res, 409, home(req, 'Another node already has that name.', name))
     }
     if (result === 'full') {
-      return send(res, 409, home('All 253 node addresses are in use.', name))
+      return send(res, 409, home(req, 'All 253 node addresses are in use.', name))
     }
     return redirect(res, '/')
   }
