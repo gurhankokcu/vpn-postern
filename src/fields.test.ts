@@ -2,6 +2,15 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { field, fields } from './fields.ts'
 
+test('a node name is 1 to 32 letters, digits, - or _, with single spaces between words', () => {
+  for (const name of ['a', 'home', 'Mum and Dad Pi', 'work-pi_2', 'x'.repeat(32)]) {
+    assert.match(name, fields.nodeName)
+  }
+  for (const name of ['', ' ', ' home', 'home ', 'Mum  Dad', "Mum & Dad's <Pi>", 'café', 'home\n', 'x'.repeat(33)]) {
+    assert.doesNotMatch(name, fields.nodeName)
+  }
+})
+
 test('a password is 12 to 256 characters on one line', () => {
   for (const password of ['x'.repeat(12), '🔑'.repeat(12), ' open sesame ', `<&'"> ß 🔑 and more`, 'x'.repeat(256), '🔑'.repeat(256)]) {
     assert.match(password, fields.password)

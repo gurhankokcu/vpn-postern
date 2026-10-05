@@ -8,7 +8,7 @@ import { after, before, beforeEach, test } from 'node:test'
 
 process.env.POSTERN_DIR = mkdtempSync(join(tmpdir(), 'postern-'))
 const { clear, hash } = await import('./auth.ts')
-const { save } = await import('./data.ts')
+const { load, save } = await import('./data.ts')
 const { listener } = await import('./server.ts')
 
 const password = 'correct-horse'
@@ -138,6 +138,56 @@ test('home reads the nodes afresh on every request', async () => {
   assert.doesNotMatch(html, /<b>home<\/b>/)
 })
 
+function add(cookie: string, body: string) {
+  return request('/nodes', {
+    method: 'POST',
+    headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' },
+    body,
+  })
+}
+
+test('adding a node saves it and goes home', async () => {
+  const res = await add(await session(), 'nodeName=Mum%20and%20Dad%20Pi')
+  assert.equal(res.status, 303)
+  assert.equal(res.headers.get('location'), '/')
+  assert.deepEqual(load().nodes.map((node) => [node.name, node.n]), [['home', 1], ['Mum and Dad Pi', 2]])
+})
+
+test('a node name against the rule is refused with a note, adding nothing', async () => {
+  const cookie = await session()
+  for (const body of ['', 'nodeName=', 'nodeName=%20work%20', `nodeName=${encodeURIComponent("Mum & Dad's <Pi>")}`]) {
+    const res = await add(cookie, body)
+    assert.equal(res.status, 400)
+    assert.match(await res.text(), /<div class="note">A node name is 1 to 32 letters, digits, - or _, with single spaces between words\.<\/div>/)
+  }
+  assert.deepEqual(load().nodes, nodes)
+})
+
+test('a refused node name stays in the form, escaped', async () => {
+  const res = await add(await session(), `nodeName=${encodeURIComponent("Mum & Dad's <Pi>")}`)
+  assert.match(await res.text(), /<input name="nodeName" value="Mum &#38; Dad&#39;s &#60;Pi&#62;"/)
+})
+
+test('a node name already in use, in any case, is refused with a note, adding nothing', async () => {
+  const res = await add(await session(), 'nodeName=HOME')
+  assert.equal(res.status, 409)
+  const html = await res.text()
+  assert.match(html, /<div class="note">Another node already has that name\.<\/div>/)
+  assert.match(html, /<input name="nodeName" value="HOME"/)
+  assert.deepEqual(load().nodes, nodes)
+})
+
+test('a node beyond the last address is refused with a note, adding nothing', async () => {
+  const full = Array.from({ length: 253 }, (_, i) => ({ name: `node${i + 2}`, n: i + 2 }))
+  save({ password: hash(password), nodes: full })
+  const res = await add(await session(), 'nodeName=extra')
+  assert.equal(res.status, 409)
+  const html = await res.text()
+  assert.match(html, /<div class="note">All 253 node addresses are in use\.<\/div>/)
+  assert.match(html, /<input name="nodeName" value="extra"/)
+  assert.deepEqual(load().nodes, full)
+})
+
 test('a password under 12 characters is refused', async () => {
   save({ password: hash('x'.repeat(11)), nodes })
   assert.equal((await login(`password=${'x'.repeat(11)}`)).status, 401)
@@ -149,7 +199,7 @@ test('a password over 256 characters is refused', async () => {
 })
 
 test('without a session every other page goes to login', async () => {
-  for (const [method, path] of [['GET', '/'], ['GET', '/missing'], ['POST', '/logout'], ['POST', '/']]) {
+  for (const [method, path] of [['GET', '/'], ['GET', '/missing'], ['POST', '/logout'], ['POST', '/'], ['POST', '/nodes']]) {
     const res = await request(path, { method })
     assert.equal(res.status, 303)
     assert.equal(res.headers.get('location'), '/login')

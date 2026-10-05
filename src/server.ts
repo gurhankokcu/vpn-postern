@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { clear, expiredCookie, fail, locked, sessionCookie, valid, verify } from './auth.ts'
 import { dir, load } from './data.ts'
 import { field } from './fields.ts'
+import { addNode } from './nodes.ts'
 import { loginPage, nodesPage, notFoundPage } from './pages.ts'
 
 const css = readFileSync(join(import.meta.dirname, 'style.css'))
@@ -26,6 +27,10 @@ function send(res: ServerResponse, status: number, body: string | Buffer, type =
 
 function redirect(res: ServerResponse, location: string, cookie?: string) {
   res.writeHead(303, cookie ? { location, 'set-cookie': cookie } : { location }).end()
+}
+
+function home(message = '', nodeName = '') {
+  return nodesPage(load().nodes, message, nodeName)
 }
 
 async function handle(req: IncomingMessage, res: ServerResponse) {
@@ -59,7 +64,22 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     return redirect(res, '/login', expiredCookie())
   }
   if (route === 'GET /') {
-    return send(res, 200, nodesPage(load().nodes))
+    return send(res, 200, home())
+  }
+  if (route === 'POST /nodes') {
+    const params = await form(req)
+    const name = field(params, 'nodeName')
+    if (name === null) {
+      return send(res, 400, home('A node name is 1 to 32 letters, digits, - or _, with single spaces between words.', params.get('nodeName') ?? ''))
+    }
+    const result = addNode(name)
+    if (result === 'taken') {
+      return send(res, 409, home('Another node already has that name.', name))
+    }
+    if (result === 'full') {
+      return send(res, 409, home('All 253 node addresses are in use.', name))
+    }
+    return redirect(res, '/')
   }
   send(res, 404, notFoundPage())
 }

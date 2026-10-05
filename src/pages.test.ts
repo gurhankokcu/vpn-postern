@@ -48,6 +48,20 @@ test('nodes page escapes node names', () => {
   assert.doesNotMatch(html, /<script>/)
 })
 
+test('nodes page has a form to add a node by name', () => {
+  assert.match(nodesPage([]), /<form class="add" method="post" action="\/nodes">\n<span class="field"><input name="nodeName" [^>]*required><\/span>\n<button class="btn primary">Add node<\/button>/)
+})
+
+test('nodes page shows a message only when given one', () => {
+  assert.doesNotMatch(nodesPage([]), /class="note"/)
+  assert.match(nodesPage([], 'Bad name.'), /<main><div class="note">Bad name\.<\/div>\n<section class="card">/)
+})
+
+test('nodes page fills the form with the name given, escaped', () => {
+  assert.doesNotMatch(nodesPage([]), /value=/)
+  assert.match(nodesPage([], 'Bad name.', `"><b>&'`), /<input name="nodeName" value="&#34;&#62;&#60;b&#62;&#38;&#39;" placeholder/)
+})
+
 test('signed-in pages have a log out button', () => {
   for (const html of [nodesPage([]), notFoundPage()]) {
     assert.match(html, /<form method="post" action="\/logout"><button class="btn ghost">Log out<\/button><\/form>/)

@@ -72,6 +72,7 @@ main { max-width: 960px; margin: 0 auto; padding: 26px; }
 
 .card-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
   padding: 15px 18px;
@@ -79,6 +80,8 @@ main { max-width: 960px; margin: 0 auto; padding: 26px; }
 }
 
 .card-head h2 { font-size: 13.5px; letter-spacing: 0.01em; }
+.card-head .add { display: flex; flex: 0 1 300px; gap: 8px; margin-left: auto; }
+.card-head .add .field { flex: 1; min-width: 0; }
 
 .pill {
   padding: 2.5px 9px;
@@ -148,7 +151,7 @@ tbody tr:hover { background: #ffffff05; }
 }
 
 .field:focus-within { border-color: #2f4a63; }
-.field input { width: 100%; border: 0; outline: 0; background: none; font-size: 12.5px; }
+.field input { width: 100%; min-width: 0; border: 0; outline: 0; background: none; font-size: 12.5px; }
 
 .note {
   padding: 11px 14px;
@@ -158,6 +161,8 @@ tbody tr:hover { background: #ffffff05; }
   color: #ff8f97;
   font-size: 12.5px;
 }
+
+main > .note { margin-bottom: 14px; }
 
 .empty { padding: 46px 20px; color: var(--text-faint); text-align: center; }
 .empty h3 { margin-bottom: 5px; color: var(--text-dim); font-size: 14px; }

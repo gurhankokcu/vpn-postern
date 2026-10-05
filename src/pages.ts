@@ -50,7 +50,7 @@ ${message && `<div class="note">${message}</div>`}
 </main>`, 'login')
 }
 
-export function nodesPage(nodes: Node[]) {
+export function nodesPage(nodes: Node[], message = '', nodeName = '') {
   const rows = nodes.map((node) => `<tr>
 <td><b>${escapeHtml(node.name)}</b></td>
 <td class="mono">${address(node)}</td>
@@ -61,9 +61,13 @@ export function nodesPage(nodes: Node[]) {
     ? `<table><thead><tr><th>Name</th><th>Address</th><th>Port</th></tr></thead><tbody>${rows}</tbody></table>`
     : `<div class="empty"><h3>No nodes yet</h3><p>Add a node to give it a tunnel to this hub.</p></div>`
 
-  return layout('Nodes', `<section class="card">
+  return layout('Nodes', `${message && `<div class="note">${message}</div>\n`}<section class="card">
 <div class="card-head">
 <h2>Nodes</h2><span class="pill">${nodes.length} total</span>
+<form class="add" method="post" action="/nodes">
+<span class="field"><input name="nodeName"${nodeName && ` value="${escapeHtml(nodeName)}"`} placeholder="Node name" aria-label="Node name" required></span>
+<button class="btn primary">Add node</button>
+</form>
 </div>
 ${body}
 </section>`)
