@@ -27,7 +27,7 @@ function started(unit: string) {
 
 test('a user other than root is refused', async () => {
   const before = await state()
-  const { code, out } = await install([], 'runuser -u nobody -- bash /mnt/postern/install.sh')
+  const { code, out } = await install([], 'runuser -u nobody -- bash /mnt/project/install.sh')
   assert.equal(code, 1)
   assert.equal(out, 'Run as root.')
   assert.equal(await state(), before)
@@ -99,7 +99,7 @@ test('an update replaces the code and restarts postern, keeping data, keys and p
 })
 
 test('the piped form, as curl | bash runs it, updates too', async () => {
-  const { code, out } = await install(['u'], 'cat /mnt/postern/install.sh | bash')
+  const { code, out } = await install(['u'], 'cat /mnt/project/install.sh | bash')
   assert.equal(code, 0, out)
   assert.match(out, running)
 })

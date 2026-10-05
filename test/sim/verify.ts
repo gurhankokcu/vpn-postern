@@ -33,7 +33,7 @@ const nats: Nat[] = [
   ['work-router', 'desktop', 1],
   ['carrier-gw', 'phone', 2],
 ]
-// Each fresh machine: a neighbour that finds its sshd, and what VPN Postern installs on it.
+// Each fresh machine: a neighbour that finds its sshd, and what gets installed on it.
 const fresh: Record<string, [neighbour: string, packages: string]> = {
   'hub':     ['tablet',      'wireguard-tools nftables qrencode'],
   'home-pi': ['home-router', 'wireguard-tools nftables'],
@@ -194,7 +194,7 @@ async function checkEverything(when: string) {
     resolves(m, 'example.com', '172.30.0.60'),
     resolves(m, 'example.org', 'nothing'),
   ])))
-  report(`Fresh machines, ready for VPN Postern${when}`, await Promise.all(Object.keys(fresh).flatMap((m) => [hostKey(m), installs(m)])))
+  report(`Fresh machines, ready to install on${when}`, await Promise.all(Object.keys(fresh).flatMap((m) => [hostKey(m), installs(m)])))
 }
 
 await checkEverything('')

@@ -3,7 +3,7 @@ FROM ubuntu:24.04
 RUN apt-get update && apt-get install -y --no-install-recommends \
       systemd systemd-sysv dbus openssh-server sudo iproute2 iputils-ping curl ca-certificates
 
-# What VPN Postern installs waits in apt's cache, so `apt-get install` works
+# What gets installed waits in apt's cache, so `apt-get install` works
 # with no internet and still finds it missing, as on a fresh droplet.
 RUN rm /etc/apt/apt.conf.d/docker-clean \
  && apt-get install -y --download-only wireguard-tools nftables qrencode

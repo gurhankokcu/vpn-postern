@@ -36,11 +36,11 @@ export function restart(machine: string) {
 // Docker Desktop shows the mounted repo as root's, so installs take a copy owned by
 // another user, as a release tarball's files are.
 export function stage() {
-  return sh('hub', 'mkdir /srv/postern && cp -r /mnt/postern/package.json /mnt/postern/src /srv/postern && chown -R 1001:1001 /srv/postern')
+  return sh('hub', 'mkdir /srv/postern && cp -r /mnt/project/package.json /mnt/project/src /srv/postern && chown -R 1001:1001 /srv/postern')
 }
 
 // install.sh asks on /dev/tty, so it runs under script, which gives it a terminal fed by the answers.
-export function install(answers: string[], command = 'bash /mnt/postern/install.sh') {
+export function install(answers: string[], command = 'bash /mnt/project/install.sh') {
   return sh('hub', `POSTERN_SOURCE=/srv/postern script -qec '${command}' /dev/null`, answers.map((answer) => `${answer}\n`).join(''))
 }
 

@@ -1,7 +1,7 @@
-name: vpn-postern
+name: sim
 
 x-machine: &machine
-  image: vpn-postern
+  image: sim
   pull_policy: never
   # As PID 1, sleep and node ignore SIGTERM; an init lets them stop at once.
   init: true
@@ -44,7 +44,7 @@ x-os: &os
 
 x-pi: &pi
   <<: *os
-  image: vpn-postern-pi
+  image: sim-pi
 
 # Docker gives a container a new MAC on every start, but a real machine keeps
 # its own, so each pins one: 02:00:00:00, then its network as in 172.30.N, then
@@ -57,11 +57,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.hub
-    image: vpn-postern-hub
-    # The release to install, as if downloaded.
+    image: sim-hub
+    # The software to install, as if downloaded.
     volumes:
-      - ../..:/mnt/postern:ro
-    # The admin UI, so a browser on the Mac can reach it.
+      - ../..:/mnt/project:ro
+    # The hub's web port, so a browser on the Mac can reach it.
     ports:
       - 127.0.0.1:8443:8443
     networks:
