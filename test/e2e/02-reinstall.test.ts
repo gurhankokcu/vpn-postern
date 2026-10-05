@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { install, login, output, restart } from './sim.ts'
 
-const password = ' open sesame '
+const password = ' open sesame twice '
 const fresh = 'new password'
 const prompt = /VPN Postern is already installed\. \[u\]pdate, keeping nodes and users \/ \[r\]eset, erasing everything \/ \[c\]ancel:/
 const running = /VPN Postern is running at https:\/\/172\.30\.0\.10:8443$/
@@ -116,9 +116,9 @@ test('a reset asks for the password until it is typed twice the same', async () 
   await output('hub', 'touch /var/lib/postern/stray')
   const before = await keys()
   const postern0 = await started('wg-quick@postern0')
-  const { code, out } = await install(['r', '', fresh, 'typo', fresh, fresh])
+  const { code, out } = await install(['r', '', 'x'.repeat(11), 'x'.repeat(257), fresh, 'typo', fresh, fresh])
   assert.equal(code, 0, out)
-  assert.match(out, /Password is empty\.\nAdmin password:/)
+  assert.equal(out.match(/A password is 12 to 256 characters\.\nAdmin password:/g)?.length, 3)
   assert.match(out, /Passwords don't match\.\nAdmin password:/)
   assert.match(out, /==> Erasing VPN Postern/)
   assert.match(out, running)

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { before, test } from 'node:test'
 import { install, login, output, page, stage } from './sim.ts'
 
-const password = ' open sesame '
+const password = ' open sesame twice '
 
 before(async () => {
   assert.equal((await stage()).code, 0)
@@ -46,7 +46,7 @@ test('the tablet finds the login page', async () => {
 })
 
 test('the password without its spaces is refused', async () => {
-  assert.equal((await login('open sesame')).status, 401)
+  assert.equal((await login('open sesame twice')).status, 401)
 })
 
 test('the password, spaces and all, signs in and shows the nodes', async () => {

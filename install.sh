@@ -60,8 +60,9 @@ main() {
     while true; do
       IFS= read -r -s -p 'Admin password: ' password < /dev/tty
       echo
-      if [ -z "$password" ]; then
-        echo 'Password is empty.'
+      length=$(LC_ALL=C.UTF-8; echo ${#password})
+      if [ "$length" -lt 12 ] || [ "$length" -gt 256 ]; then
+        echo 'A password is 12 to 256 characters.'
         continue
       fi
       IFS= read -r -s -p 'Again: ' again < /dev/tty

@@ -11,7 +11,7 @@ const { clear, hash } = await import('./auth.ts')
 const { save } = await import('./data.ts')
 const { listener } = await import('./server.ts')
 
-const password = 'secret'
+const password = 'correct-horse'
 const nodes = [{ name: 'home', n: 1 }]
 const server = createServer(listener)
 let base = ''
@@ -76,7 +76,7 @@ test('the right password signs in and goes home', async () => {
 })
 
 test('a wrong password is refused', async () => {
-  const res = await login('password=wrong')
+  const res = await login('password=wrong-password')
   assert.equal(res.status, 401)
   assert.equal(res.headers.get('set-cookie'), null)
   assert.match(await res.text(), /Wrong password\./)
@@ -95,7 +95,7 @@ test('no password is right before one is set', async () => {
 
 test('five wrong passwords lock the login, even for the right one', async () => {
   for (let i = 0; i < 5; i++) {
-    assert.equal((await login('password=wrong')).status, 401)
+    assert.equal((await login('password=wrong-password')).status, 401)
   }
   const res = await login(`password=${password}`)
   assert.equal(res.status, 429)
@@ -105,11 +105,11 @@ test('five wrong passwords lock the login, even for the right one', async () => 
 
 test('signing in forgets earlier wrong passwords', async () => {
   for (let i = 0; i < 4; i++) {
-    await login('password=wrong')
+    await login('password=wrong-password')
   }
   assert.equal((await login(`password=${password}`)).status, 303)
   for (let i = 0; i < 4; i++) {
-    assert.equal((await login('password=wrong')).status, 401)
+    assert.equal((await login('password=wrong-password')).status, 401)
   }
 })
 
@@ -136,6 +136,16 @@ test('home reads the nodes afresh on every request', async () => {
   const html = await (await request('/', { headers: { cookie } })).text()
   assert.match(html, /<b>work<\/b>/)
   assert.doesNotMatch(html, /<b>home<\/b>/)
+})
+
+test('a password under 12 characters is refused', async () => {
+  save({ password: hash('x'.repeat(11)), nodes })
+  assert.equal((await login(`password=${'x'.repeat(11)}`)).status, 401)
+})
+
+test('a password over 256 characters is refused', async () => {
+  save({ password: hash('x'.repeat(257)), nodes })
+  assert.equal((await login(`password=${'x'.repeat(257)}`)).status, 401)
 })
 
 test('without a session every other page goes to login', async () => {

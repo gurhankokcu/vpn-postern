@@ -4,6 +4,7 @@ import { createServer } from 'node:https'
 import { join } from 'node:path'
 import { clear, expiredCookie, fail, locked, sessionCookie, valid, verify } from './auth.ts'
 import { dir, load } from './data.ts'
+import { field } from './fields.ts'
 import { loginPage, nodesPage, notFoundPage } from './pages.ts'
 
 const css = readFileSync(join(import.meta.dirname, 'style.css'))
@@ -41,7 +42,8 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     if (locked(ip)) {
       return send(res, 429, loginPage('Too many attempts. Try again later.'))
     }
-    if (!verify((await form(req)).get('password') ?? '', load().password)) {
+    const password = field(await form(req), 'password')
+    if (password === null || !verify(password, load().password)) {
       fail(ip)
       return send(res, 401, loginPage('Wrong password.'))
     }
