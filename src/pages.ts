@@ -63,14 +63,15 @@ export function nodesPage({ nodes, joins, handshakes, host, pin, message = '', n
 <td><span class="pill ${status}">${status}</span></td>
 <td class="mono">${address(node)}</td>
 <td class="mono">${port(node)}</td>
+<td class="action"><form method="post" action="/nodes/${node.n}/remove" data-confirm="Remove ${escapeHtml(node.name)}? It stops working until you add it and run its new join command." onsubmit="return confirm(this.dataset.confirm)"><button class="btn ghost">Remove</button></form></td>
 </tr>`
     const join = waiting.get(node.n)
     return join ? `${row}
-<tr class="join"><td colspan="4"><code class="mono">curl -fsSk --pinnedpubkey sha256//${pin} https://${escapeHtml(host)}/join/${join.token} | sudo sh</code></td></tr>` : row
+<tr class="join"><td colspan="5"><code class="mono">curl -fsSk --pinnedpubkey sha256//${pin} https://${escapeHtml(host)}/join/${join.token} | sudo sh</code></td></tr>` : row
   }).join('')
 
   const body = nodes.length
-    ? `<table><thead><tr><th>Name</th><th>Status</th><th>Address</th><th>Port</th></tr></thead><tbody>${rows}</tbody></table>`
+    ? `<table><thead><tr><th>Name</th><th>Status</th><th>Address</th><th>Port</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
     : `<div class="empty"><h3>No nodes yet</h3><p>Add a node to give it a tunnel to this hub.</p></div>`
 
   return layout('Nodes', `${message && `<div class="note">${message}</div>\n`}<section class="card">

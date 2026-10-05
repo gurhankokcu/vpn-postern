@@ -7,7 +7,7 @@ import { beforeEach, test } from 'node:test'
 process.env.POSTERN_DIR = mkdtempSync(join(tmpdir(), 'postern-'))
 process.env.PATH = `${join(import.meta.dirname, '..', 'dev', 'bin')}:${process.env.PATH}`
 const { load, save } = await import('./data.ts')
-const { addNode, dropJoin, findJoin } = await import('./nodes.ts')
+const { addNode, dropJoin, findJoin, removeNode } = await import('./nodes.ts')
 const log = join(process.env.POSTERN_DIR, 'wg.log')
 
 beforeEach(() => {
@@ -98,6 +98,40 @@ test('adding a node drops expired joins', () => {
   save({ password: '', nodes, joins })
   addNode('home')
   assert.deepEqual(load().joins.map((join) => join.n), [6, 2])
+})
+
+test('removing a node takes its peer off postern0, live and in its conf', () => {
+  addNode('home')
+  assert.equal(removeNode(2), 'removed')
+  assert.deepEqual(readFileSync(log, 'utf8').trim().split('\n').slice(4), [
+    'wg set postern0 peer public1 remove',
+    'wg-quick save postern0',
+  ])
+})
+
+test('removing a node drops it and its join, keeps the rest, and drops expired joins', () => {
+  const nodes = [{ name: 'home', n: 2, publicKey: 'home' }, { name: 'work', n: 3, publicKey: 'work' }]
+  const joins = [{ token: 'home', n: 2, privateKey: 'key', expires: Date.now() + 60_000 }, { token: 'work', n: 3, privateKey: 'key', expires: Date.now() + 60_000 }, { token: 'old', n: 4, privateKey: 'key', expires: Date.now() - 1 }]
+  save({ password: 'salt:key', nodes, joins })
+  removeNode(2)
+  assert.deepEqual(load(), { password: 'salt:key', nodes: [nodes[1]], joins: [joins[1]] })
+})
+
+test('a removed node frees its n and its name', () => {
+  addNode('home')
+  addNode('work')
+  removeNode(2)
+  assert.equal(addNode('home'), 'added')
+  assert.deepEqual(load().nodes.map((node) => [node.name, node.n]), [['work', 3], ['home', 2]])
+})
+
+test('removing an unknown node runs no wg and changes nothing', () => {
+  addNode('home')
+  rmSync(log)
+  const before = load()
+  assert.equal(removeNode(3), 'missing')
+  assert.equal(existsSync(log), false)
+  assert.deepEqual(load(), before)
 })
 
 test('a live join is found until it is dropped', () => {

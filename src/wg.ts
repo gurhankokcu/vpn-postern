@@ -26,3 +26,8 @@ export function addPeer(node: Node) {
   run('wg', ['set', 'postern0', 'peer', node.publicKey, 'allowed-ips', `${address(node)}/32`])
   run('wg-quick', ['save', 'postern0'])
 }
+
+export function removePeer(node: Node) {
+  run('wg', ['set', 'postern0', 'peer', node.publicKey, 'remove'])
+  run('wg-quick', ['save', 'postern0'])
+}

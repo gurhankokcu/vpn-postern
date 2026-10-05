@@ -41,7 +41,7 @@ test('nodes page lists each node with its status, address and port', () => {
   const html = nodesPage({ ...view, nodes: [{ name: 'home', n: 1, publicKey: 'key' }, { name: 'work', n: 2, publicKey: 'key' }] })
   assert.match(html, /2 total/)
   assert.doesNotMatch(html, /No nodes yet/)
-  assert.match(html, /<th>Name<\/th><th>Status<\/th><th>Address<\/th><th>Port<\/th>/)
+  assert.match(html, /<th>Name<\/th><th>Status<\/th><th>Address<\/th><th>Port<\/th><th><\/th><\/tr>/)
   assert.match(html, /<td><b>home<\/b><\/td>\n<td><span class="pill offline">offline<\/span><\/td>\n<td class="mono">10\.99\.0\.1<\/td>\n<td class="mono">51821<\/td>/)
   assert.match(html, /<td><b>work<\/b><\/td>\n<td><span class="pill offline">offline<\/span><\/td>\n<td class="mono">10\.99\.0\.2<\/td>\n<td class="mono">51822<\/td>/)
 })
@@ -57,6 +57,16 @@ test('nodes page shows a node online only after a handshake under 3 minutes ago'
 
 test('nodes page shows a node missing from the handshakes offline', () => {
   assert.match(nodesPage({ ...view, nodes: [{ name: 'home', n: 2, publicKey: 'key' }] }), /<span class="pill offline">offline<\/span>/)
+})
+
+test('nodes page has a remove button on every node, asking first', () => {
+  const html = nodesPage({ ...view, nodes: [{ name: 'home', n: 2, publicKey: 'key' }, { name: 'work', n: 3, publicKey: 'key' }] })
+  assert.match(html, /<td class="mono">51822<\/td>\n<td class="action"><form method="post" action="\/nodes\/2\/remove" data-confirm="Remove home\? It stops working until you add it and run its new join command\." onsubmit="return confirm\(this\.dataset\.confirm\)"><button class="btn ghost">Remove<\/button><\/form><\/td>\n<\/tr>/)
+  assert.match(html, /action="\/nodes\/3\/remove" data-confirm="Remove work\?/)
+})
+
+test('nodes page escapes the node name in the remove question', () => {
+  assert.match(nodesPage({ ...view, nodes: [{ name: `"><b>&'`, n: 2, publicKey: 'key' }] }), /data-confirm="Remove &#34;&#62;&#60;b&#62;&#38;&#39;\? /)
 })
 
 test('nodes page escapes node names', () => {
@@ -83,7 +93,7 @@ test('nodes page shows the pinned join command under a node waiting to join', ()
   const nodes = [{ name: 'home', n: 2, publicKey: 'key' }, { name: 'work', n: 3, publicKey: 'key' }]
   const joins = [{ token: 'abc', n: 2, privateKey: 'key', expires: Date.now() + 60_000 }]
   const html = nodesPage({ ...view, nodes, joins, pin: 'pin=' })
-  assert.match(html, /<td class="mono">51822<\/td>\n<\/tr>\n<tr class="join"><td colspan="4"><code class="mono">curl -fsSk --pinnedpubkey sha256\/\/pin= https:\/\/hub:8443\/join\/abc \| sudo sh<\/code><\/td><\/tr>/)
+  assert.match(html, /<td class="mono">51822<\/td>\n<td class="action">.*<\/td>\n<\/tr>\n<tr class="join"><td colspan="5"><code class="mono">curl -fsSk --pinnedpubkey sha256\/\/pin= https:\/\/hub:8443\/join\/abc \| sudo sh<\/code><\/td><\/tr>/)
   assert.equal(html.match(/class="join"/g)?.length, 1)
 })
 

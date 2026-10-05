@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { live, load, save } from './data.ts'
-import { addPeer, keypair } from './wg.ts'
+import { addPeer, keypair, removePeer } from './wg.ts'
 
 const joinMs = 60 * 60 * 1000
 
@@ -22,6 +22,17 @@ export function addNode(name: string) {
   addPeer(node)
   save({ ...data, nodes: [...data.nodes, node], joins: [...live(data.joins), join] })
   return 'added'
+}
+
+export function removeNode(n: number) {
+  const data = load()
+  const node = data.nodes.find((other) => other.n === n)
+  if (!node) {
+    return 'missing'
+  }
+  removePeer(node)
+  save({ ...data, nodes: data.nodes.filter((other) => other.n !== n), joins: live(data.joins).filter((join) => join.n !== n) })
+  return 'removed'
 }
 
 export function findJoin(token: string) {

@@ -7,7 +7,7 @@ import { clear, expiredCookie, fail, locked, sessionCookie, valid, verify } from
 import { dir, load } from './data.ts'
 import { field } from './fields.ts'
 import { joinScript } from './join.ts'
-import { addNode, dropJoin, findJoin } from './nodes.ts'
+import { addNode, dropJoin, findJoin, removeNode } from './nodes.ts'
 import { loginPage, nodesPage, notFoundPage } from './pages.ts'
 import { handshakes, hubKey } from './wg.ts'
 
@@ -99,6 +99,13 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     }
     if (result === 'full') {
       return send(res, 409, home(req, 'All 253 node addresses are in use.', name))
+    }
+    return redirect(res, '/')
+  }
+  const remove = route.match(/^POST \/nodes\/(\d+)\/remove$/)
+  if (remove) {
+    if (removeNode(Number(remove[1])) === 'missing') {
+      return send(res, 404, notFoundPage())
     }
     return redirect(res, '/')
   }

@@ -236,6 +236,23 @@ test('a node beyond the last address is refused with a note, adding nothing', as
   assert.deepEqual(load().nodes, full)
 })
 
+test('removing a node drops it and goes home', async () => {
+  const res = await request('/nodes/1/remove', { method: 'POST', headers: { cookie: await session() } })
+  assert.equal(res.status, 303)
+  assert.equal(res.headers.get('location'), '/')
+  assert.deepEqual(load().nodes, [])
+})
+
+test('removing an unknown node is not found, changing nothing', async () => {
+  const cookie = await session()
+  for (const path of ['/nodes/9/remove', '/nodes/x/remove', '/nodes//remove']) {
+    const res = await request(path, { method: 'POST', headers: { cookie } })
+    assert.equal(res.status, 404)
+    assert.match(await res.text(), /<h3>Not found<\/h3>/)
+  }
+  assert.deepEqual(load().nodes, nodes)
+})
+
 test('a password under 12 characters is refused', async () => {
   save({ password: hash('x'.repeat(11)), nodes, joins: [] })
   assert.equal((await login(`password=${'x'.repeat(11)}`)).status, 401)
@@ -247,7 +264,7 @@ test('a password over 256 characters is refused', async () => {
 })
 
 test('without a session every other page goes to login', async () => {
-  for (const [method, path] of [['GET', '/'], ['GET', '/missing'], ['POST', '/logout'], ['POST', '/'], ['POST', '/nodes']]) {
+  for (const [method, path] of [['GET', '/'], ['GET', '/missing'], ['POST', '/logout'], ['POST', '/'], ['POST', '/nodes'], ['POST', '/nodes/1/remove']]) {
     const res = await request(path, { method })
     assert.equal(res.status, 303)
     assert.equal(res.headers.get('location'), '/login')
