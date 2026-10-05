@@ -18,7 +18,7 @@ test('load with no file is no password and no nodes', () => {
 })
 
 test('load returns what save saved', () => {
-  const data = { password: 'salt:key', nodes: [{ name: 'home', n: 1 }, { name: 'work', n: 2 }] }
+  const data = { password: 'salt:key', nodes: [{ name: 'home', n: 1, publicKey: 'key' }, { name: 'work', n: 2, publicKey: 'key' }] }
   save(data)
   assert.deepEqual(load(), data)
 })
@@ -30,24 +30,24 @@ test('save leaves only data.json, readable by its owner alone', () => {
 })
 
 test('save replaces what was there', () => {
-  save({ password: 'a', nodes: [{ name: 'home', n: 1 }] })
+  save({ password: 'a', nodes: [{ name: 'home', n: 1, publicKey: 'key' }] })
   save({ password: 'b', nodes: [] })
   assert.deepEqual(load(), { password: 'b', nodes: [] })
 })
 
 test('load fills in what the file leaves out', () => {
-  writeFileSync(file, JSON.stringify({ nodes: [{ name: 'home', n: 1 }] }))
-  assert.deepEqual(load(), { password: '', nodes: [{ name: 'home', n: 1 }] })
+  writeFileSync(file, JSON.stringify({ nodes: [{ name: 'home', n: 1, publicKey: 'key' }] }))
+  assert.deepEqual(load(), { password: '', nodes: [{ name: 'home', n: 1, publicKey: 'key' }] })
   writeFileSync(file, JSON.stringify({ password: 'salt:key' }))
   assert.deepEqual(load(), { password: 'salt:key', nodes: [] })
 })
 
 test('a node n is at 10.99.0.n', () => {
-  assert.equal(address({ name: 'home', n: 1 }), '10.99.0.1')
-  assert.equal(address({ name: 'home', n: 254 }), '10.99.0.254')
+  assert.equal(address({ name: 'home', n: 1, publicKey: 'key' }), '10.99.0.1')
+  assert.equal(address({ name: 'home', n: 254, publicKey: 'key' }), '10.99.0.254')
 })
 
 test('a node n listens on 51820 + n', () => {
-  assert.equal(port({ name: 'home', n: 1 }), 51821)
-  assert.equal(port({ name: 'home', n: 254 }), 52074)
+  assert.equal(port({ name: 'home', n: 1, publicKey: 'key' }), 51821)
+  assert.equal(port({ name: 'home', n: 254, publicKey: 'key' }), 52074)
 })

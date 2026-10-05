@@ -1,0 +1,3 @@
+#!/bin/sh
+# Stands in for wg-quick off the hub: logs each call.
+echo "wg-quick $*" >> "$POSTERN_DIR/wg.log"

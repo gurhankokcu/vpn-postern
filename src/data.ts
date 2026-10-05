@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-export type Node = { name: string; n: number }
+export type Node = { name: string; n: number; publicKey: string }
 export type Data = { password: string; nodes: Node[] }
 
 export const dir = process.env.POSTERN_DIR ?? '.dev'

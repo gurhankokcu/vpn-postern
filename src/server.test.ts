@@ -7,12 +7,13 @@ import { join } from 'node:path'
 import { after, before, beforeEach, test } from 'node:test'
 
 process.env.POSTERN_DIR = mkdtempSync(join(tmpdir(), 'postern-'))
+process.env.PATH = `${join(import.meta.dirname, '..', 'test', 'bin')}:${process.env.PATH}`
 const { clear, hash } = await import('./auth.ts')
 const { load, save } = await import('./data.ts')
 const { listener } = await import('./server.ts')
 
 const password = 'correct-horse'
-const nodes = [{ name: 'home', n: 1 }]
+const nodes = [{ name: 'home', n: 1, publicKey: 'key' }]
 const server = createServer(listener)
 let base = ''
 
@@ -132,7 +133,7 @@ test('home lists the nodes to a signed-in admin', async () => {
 
 test('home reads the nodes afresh on every request', async () => {
   const cookie = await session()
-  save({ password: hash(password), nodes: [{ name: 'work', n: 2 }] })
+  save({ password: hash(password), nodes: [{ name: 'work', n: 2, publicKey: 'key' }] })
   const html = await (await request('/', { headers: { cookie } })).text()
   assert.match(html, /<b>work<\/b>/)
   assert.doesNotMatch(html, /<b>home<\/b>/)
@@ -178,7 +179,7 @@ test('a node name already in use, in any case, is refused with a note, adding no
 })
 
 test('a node beyond the last address is refused with a note, adding nothing', async () => {
-  const full = Array.from({ length: 253 }, (_, i) => ({ name: `node${i + 2}`, n: i + 2 }))
+  const full = Array.from({ length: 253 }, (_, i) => ({ name: `node${i + 2}`, n: i + 2, publicKey: 'key' }))
   save({ password: hash(password), nodes: full })
   const res = await add(await session(), 'nodeName=extra')
   assert.equal(res.status, 409)

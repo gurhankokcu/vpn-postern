@@ -35,7 +35,7 @@ test('nodes page with no nodes says so', () => {
 })
 
 test('nodes page lists each node with its address and port', () => {
-  const html = nodesPage([{ name: 'home', n: 1 }, { name: 'work', n: 2 }])
+  const html = nodesPage([{ name: 'home', n: 1, publicKey: 'key' }, { name: 'work', n: 2, publicKey: 'key' }])
   assert.match(html, /2 total/)
   assert.doesNotMatch(html, /No nodes yet/)
   assert.match(html, /<td><b>home<\/b><\/td>\n<td class="mono">10\.99\.0\.1<\/td>\n<td class="mono">51821<\/td>/)
@@ -43,7 +43,7 @@ test('nodes page lists each node with its address and port', () => {
 })
 
 test('nodes page escapes node names', () => {
-  const html = nodesPage([{ name: `<script>"&'</script>`, n: 1 }])
+  const html = nodesPage([{ name: `<script>"&'</script>`, n: 1, publicKey: 'key' }])
   assert.match(html, /<b>&#60;script&#62;&#34;&#38;&#39;&#60;\/script&#62;<\/b>/)
   assert.doesNotMatch(html, /<script>/)
 })

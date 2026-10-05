@@ -1,4 +1,5 @@
 import { load, save } from './data.ts'
+import { addPeer, keypair } from './wg.ts'
 
 export function addNode(name: string) {
   const data = load()
@@ -12,7 +13,9 @@ export function addNode(name: string) {
   if (n > 254) {
     return 'full'
   }
-  const node = { name, n }
+  const { publicKey } = keypair()
+  const node = { name, n, publicKey }
+  addPeer(node)
   save({ ...data, nodes: [...data.nodes, node] })
   return 'added'
 }

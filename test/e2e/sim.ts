@@ -55,3 +55,7 @@ export async function login(password: string) {
 export function page(path: string, cookie = '') {
   return output('tablet', `${curl} -H 'cookie: ${cookie}' ${hub}${path}`)
 }
+
+export async function post(path: string, cookie: string, data: string) {
+  return Number(await output('tablet', `${curl} -o /dev/null -w '%{http_code}' -H 'cookie: ${cookie}' --data-urlencode '${data}' ${hub}${path}`))
+}
