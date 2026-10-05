@@ -21,6 +21,10 @@ export function save(data: Data) {
   renameSync(`${file}.tmp`, file)
 }
 
+export function live(joins: Join[]) {
+  return joins.filter((join) => join.expires > Date.now())
+}
+
 export function address(node: Pick<Node, 'n'>) {
   return `10.99.0.${node.n}`
 }

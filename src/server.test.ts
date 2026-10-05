@@ -143,6 +143,13 @@ test('home reads the nodes afresh on every request', async () => {
   assert.doesNotMatch(html, /<b>home<\/b>/)
 })
 
+test('home shows a node online from its latest handshake', async () => {
+  writeFileSync(join(dir, 'handshakes'), `key\t${Math.floor(Date.now() / 1000)}\n`)
+  const html = await (await request('/', { headers: { cookie: await session() } })).text()
+  rmSync(join(dir, 'handshakes'))
+  assert.match(html, /<b>home<\/b><\/td>\n<td><span class="pill online">online<\/span>/)
+})
+
 test('home shows the pinned join command with the host it was reached at', async () => {
   save({ password: hash(password), nodes, joins: [{ token: 'abc', n: 1, privateKey: 'key', expires: Date.now() + 60_000 }] })
   const html = await (await request('/', { headers: { cookie: await session() } })).text()

@@ -21,7 +21,7 @@ function peers() {
 
 test('the tablet adds a node and sees it listed', async () => {
   assert.equal(await post('/nodes', cookie, 'nodeName=Home Pi'), 303)
-  assert.match(await page('/', cookie), /<td><b>Home Pi<\/b><\/td>\n<td class="mono">10\.99\.0\.2<\/td>/)
+  assert.match(await page('/', cookie), /<td><b>Home Pi<\/b><\/td>\n<td><span class="pill offline">offline<\/span><\/td>\n<td class="mono">10\.99\.0\.2<\/td>/)
 })
 
 test('the node is a live postern0 peer at 10.99.0.2', async () => {

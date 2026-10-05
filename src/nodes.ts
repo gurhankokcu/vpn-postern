@@ -1,12 +1,8 @@
 import { randomBytes } from 'node:crypto'
-import { load, save, type Join } from './data.ts'
+import { live, load, save } from './data.ts'
 import { addPeer, keypair } from './wg.ts'
 
 const joinMs = 60 * 60 * 1000
-
-function live(joins: Join[]) {
-  return joins.filter((join) => join.expires > Date.now())
-}
 
 export function addNode(name: string) {
   const data = load()

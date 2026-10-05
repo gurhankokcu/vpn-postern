@@ -6,7 +6,7 @@ import { test } from 'node:test'
 
 const dir = join(mkdtempSync(join(tmpdir(), 'postern-')), 'nested', 'dir')
 process.env.POSTERN_DIR = dir
-const { address, load, port, save } = await import('./data.ts')
+const { address, live, load, port, save } = await import('./data.ts')
 const file = join(dir, 'data.json')
 
 test('the data directory is POSTERN_DIR, made on import', () => {
@@ -50,4 +50,10 @@ test('a node n is at 10.99.0.n', () => {
 test('a node n listens on 51820 + n', () => {
   assert.equal(port({ n: 1 }), 51821)
   assert.equal(port({ n: 254 }), 52074)
+})
+
+test('live keeps only joins that have not expired', () => {
+  const fresh = { token: 'fresh', n: 2, privateKey: 'key', expires: Date.now() + 60_000 }
+  const stale = { token: 'stale', n: 2, privateKey: 'key', expires: Date.now() - 1 }
+  assert.deepEqual(live([stale, fresh]), [fresh])
 })

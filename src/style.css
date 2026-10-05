@@ -93,6 +93,7 @@ main { max-width: 960px; margin: 0 auto; padding: 26px; }
   font-weight: 500;
   white-space: nowrap;
 }
+.pill.online { border-color: var(--wire-glow); background: #37d4c41c; color: var(--wire); }
 
 th {
   padding: 11px 18px;

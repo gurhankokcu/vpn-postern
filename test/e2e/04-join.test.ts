@@ -32,6 +32,10 @@ async function node() {
   return (await data()).nodes.find((node: { name: string }) => node.name === 'home-pi')
 }
 
+async function status() {
+  return (await page('/', cookie)).match(/<td><b>home-pi<\/b><\/td>\n<td><span class="pill (\w+)">/)?.[1]
+}
+
 async function readCommand() {
   const html = await page('/', cookie)
   command = html.match(/<td><b>home-pi<\/b><\/td>[\s\S]*?<code class="mono">(curl [^<]+)<\/code>/)?.[1] ?? ''
@@ -41,6 +45,7 @@ async function readCommand() {
 test('the tablet adds home-pi and sees its join command', async () => {
   assert.equal(await post('/nodes', cookie, 'nodeName=home-pi'), 303)
   await readCommand()
+  assert.equal(await status(), 'offline')
 })
 
 test('with the wrong pin, home-pi refuses the hub and the command stays unused', async () => {
@@ -58,6 +63,10 @@ test('home-pi runs the join command', async () => {
 test('the tunnel carries traffic both ways', async () => {
   assert.equal((await sh('home-pi', 'ping -c 3 -W 5 10.99.0.1')).code, 0)
   assert.equal((await sh('hub', `ping -c 3 -W 5 ${await address()}`)).code, 0)
+})
+
+test('the tablet sees home-pi online', async () => {
+  assert.equal(await status(), 'online')
 })
 
 test('the hub runs commands on home-pi over SSH', async () => {

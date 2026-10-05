@@ -9,7 +9,7 @@ import { field } from './fields.ts'
 import { joinScript } from './join.ts'
 import { addNode, dropJoin, findJoin } from './nodes.ts'
 import { loginPage, nodesPage, notFoundPage } from './pages.ts'
-import { hubKey } from './wg.ts'
+import { handshakes, hubKey } from './wg.ts'
 
 const css = readFileSync(join(import.meta.dirname, 'style.css'))
 
@@ -39,7 +39,7 @@ function pin() {
 
 function home(req: IncomingMessage, message = '', nodeName = '') {
   const { nodes, joins } = load()
-  return nodesPage({ nodes, joins, host: req.headers.host ?? '', pin: pin(), message, nodeName })
+  return nodesPage({ nodes, joins, handshakes: handshakes(), host: req.headers.host ?? '', pin: pin(), message, nodeName })
 }
 
 async function handle(req: IncomingMessage, res: ServerResponse) {

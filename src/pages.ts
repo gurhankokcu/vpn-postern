@@ -1,4 +1,6 @@
-import { address, port, type Join, type Node } from './data.ts'
+import { address, live, port, type Join, type Node } from './data.ts'
+
+const onlineMs = 3 * 60 * 1000
 
 const mark = `<svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
 <path d="M4 28V11l12-7 12 7v17" stroke="url(#g)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
@@ -50,22 +52,25 @@ ${message && `<div class="note">${message}</div>`}
 </main>`, 'login')
 }
 
-export type NodesView = { nodes: Node[]; joins: Join[]; host: string; pin: string; message?: string; nodeName?: string }
+export type NodesView = { nodes: Node[]; joins: Join[]; handshakes: Map<string, number>; host: string; pin: string; message?: string; nodeName?: string }
 
-export function nodesPage({ nodes, joins, host, pin, message = '', nodeName = '' }: NodesView) {
+export function nodesPage({ nodes, joins, handshakes, host, pin, message = '', nodeName = '' }: NodesView) {
+  const waiting = new Map(live(joins).map((join) => [join.n, join]))
   const rows = nodes.map((node) => {
+    const status = Date.now() - (handshakes.get(node.publicKey) ?? 0) < onlineMs ? 'online' : 'offline'
     const row = `<tr>
 <td><b>${escapeHtml(node.name)}</b></td>
+<td><span class="pill ${status}">${status}</span></td>
 <td class="mono">${address(node)}</td>
 <td class="mono">${port(node)}</td>
 </tr>`
-    const join = joins.find((join) => join.n === node.n && join.expires > Date.now())
+    const join = waiting.get(node.n)
     return join ? `${row}
-<tr class="join"><td colspan="3"><code class="mono">curl -fsSk --pinnedpubkey sha256//${pin} https://${escapeHtml(host)}/join/${join.token} | sudo sh</code></td></tr>` : row
+<tr class="join"><td colspan="4"><code class="mono">curl -fsSk --pinnedpubkey sha256//${pin} https://${escapeHtml(host)}/join/${join.token} | sudo sh</code></td></tr>` : row
   }).join('')
 
   const body = nodes.length
-    ? `<table><thead><tr><th>Name</th><th>Address</th><th>Port</th></tr></thead><tbody>${rows}</tbody></table>`
+    ? `<table><thead><tr><th>Name</th><th>Status</th><th>Address</th><th>Port</th></tr></thead><tbody>${rows}</tbody></table>`
     : `<div class="empty"><h3>No nodes yet</h3><p>Add a node to give it a tunnel to this hub.</p></div>`
 
   return layout('Nodes', `${message && `<div class="note">${message}</div>\n`}<section class="card">
