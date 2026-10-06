@@ -5,7 +5,7 @@ import { createServer } from 'node:https'
 import { join } from 'node:path'
 import { clear, expiredCookie, fail, locked, sessionCookie, valid, verify } from './auth.ts'
 import { dir, load, type Node } from './data.ts'
-import { addDevice, listDevices, qr, showDevice } from './devices.ts'
+import { addDevice, listDevices, qr, removeDevice, showDevice } from './devices.ts'
 import { field, fields } from './fields.ts'
 import { joinScript } from './join.ts'
 import { addNode, dropJoin, findJoin, removeNode } from './nodes.ts'
@@ -145,6 +145,18 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
       return send(res, 503, nodePage({ node: adding, devices: null, deviceName: name }))
     }
     return redirect(res, `/nodes/${adding.n}/devices/${name}`)
+  }
+  const [, removeN, removeName = ''] = route.match(/^POST \/nodes\/(\d+)\/devices\/([^/]+)\/remove$/) ?? []
+  const removing = fields.deviceName.test(removeName) ? findNode(removeN) : undefined
+  if (removing) {
+    const result = await removeDevice(removing, removeName)
+    if (result === 'missing') {
+      return send(res, 404, notFoundPage())
+    }
+    if (result === 'offline') {
+      return send(res, 503, nodePage({ node: removing, devices: null }))
+    }
+    return redirect(res, `/nodes/${removing.n}`)
   }
   const [, showN, name = '', download] = route.match(/^GET \/nodes\/(\d+)\/devices\/([^/]+?)(\.conf)?$/) ?? []
   const showing = fields.deviceName.test(name) ? findNode(showN) : undefined

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { before, test } from 'node:test'
-import { node, output, page, post, setPasswordAndLogin, sh } from './sim.ts'
+import { connect, disconnect, node, output, page, post, setPasswordAndLogin, sh } from './sim.ts'
 
 const password = 'add device e2e'
 let cookie = ''
@@ -31,29 +31,15 @@ test('home-pi runs the phone as a peer, live and in its wg0.conf', async () => {
   assert.equal(await output('home-pi', 'stat -c %a /etc/wireguard/wg0.conf /etc/wireguard/clients/phone.conf'), '600\n600')
 })
 
-// The phone has no bash for wg-quick, so it does by hand what wg-quick would: wg takes the
-// conf without the lines only wg-quick reads, and two half routes send everything else through
-// the tunnel, while the hub stays reachable the usual way.
 test('the phone, behind the carrier NAT, reaches home-pi\'s LAN and the internet from the home IP', async () => {
   try {
-    const setup = await sh('phone', [
-      'umask 077',
-      'cat > /tmp/phone.conf',
-      "grep -v -e '^Address = ' -e '^DNS = ' -e '^MTU = ' /tmp/phone.conf > /tmp/phone.wg",
-      'ip link add wgp type wireguard',
-      'wg setconf wgp /tmp/phone.wg',
-      "ip addr add $(sed -n 's/^Address = //p' /tmp/phone.conf) dev wgp",
-      "ip link set wgp mtu $(sed -n 's/^MTU = //p' /tmp/phone.conf) up",
-      "ip route add 172.30.0.10/32 via $(ip route show default | cut -d ' ' -f 3)",
-      'ip route add 0.0.0.0/1 dev wgp',
-      'ip route add 128.0.0.0/1 dev wgp',
-    ].join(' && '), conf)
+    const setup = await connect('phone', conf)
     assert.equal(setup.code, 0, setup.out)
     assert.equal((await sh('phone', 'ping -c 3 -W 5 10.66.66.1')).code, 0)
     assert.deepEqual(JSON.parse(await output('phone', 'curl -s -m 5 http://192.168.1.30')), { server: 'camera', client: '192.168.1.10' })
     assert.deepEqual(JSON.parse(await output('phone', 'curl -s -m 5 http://example.com')), { server: 'example.com', client: '172.30.0.20' })
   } finally {
-    await sh('phone', 'ip link del wgp; ip route del 172.30.0.10/32; rm -f /tmp/phone.conf /tmp/phone.wg')
+    await disconnect('phone')
   }
 })
 

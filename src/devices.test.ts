@@ -7,7 +7,7 @@ import { beforeEach, test } from 'node:test'
 
 process.env.POSTERN_DIR = mkdtempSync(join(tmpdir(), 'postern-'))
 process.env.PATH = `${join(import.meta.dirname, '..', 'dev', 'bin')}:${process.env.PATH}`
-const { addDevice, clientConf, devices, freeX, listDevices, peer, qr, showDevice, writeScript } = await import('./devices.ts')
+const { addDevice, addScript, clientConf, devices, freeX, listDevices, peer, qr, removeDevice, removeScript, showDevice, withoutDevice } = await import('./devices.ts')
 const dir = process.env.POSTERN_DIR
 const node = { name: 'home', n: 2, publicKey: 'key' }
 
@@ -95,8 +95,8 @@ AllowedIPs = 0.0.0.0/0, ::/0
 `)
 })
 
-test('writeScript is valid sh that writes both files privately, then applies the peers live', () => {
-  const script = writeScript('mum', 'WG0\n', 'CLIENT\n')
+test('addScript is valid sh that writes both files privately, then applies the peers live', () => {
+  const script = addScript('mum', 'WG0\n', 'CLIENT\n')
   execFileSync('sh', ['-n'], { input: script })
   assert.equal(script, `set -eu
 umask 077
@@ -109,6 +109,50 @@ WG0
 EOF
 mv /etc/wireguard/clients/mum.conf.tmp /etc/wireguard/clients/mum.conf
 mv /etc/wireguard/wg0.conf.tmp /etc/wireguard/wg0.conf
+wg-quick strip wg0 | wg syncconf wg0 /dev/stdin
+`)
+})
+
+test('withoutDevice drops the device\'s block and the blank line before it, leaving the rest byte for byte', () => {
+  assert.equal(withoutDevice(twoDevices, 'mum'), `${server}
+### Client Dad-Phone
+[Peer]
+PublicKey = dadpublic
+AllowedIPs = 10.66.66.4/32
+`)
+  assert.equal(withoutDevice(twoDevices, 'Dad-Phone'), `${server}
+### Client mum
+[Peer]
+PublicKey = mumpublic
+AllowedIPs = 10.66.66.2/32
+`)
+})
+
+test('withoutDevice undoes adding a device exactly', () => {
+  assert.equal(withoutDevice(twoDevices + peer('tablet', 'tabletpublic', 3), 'tablet'), twoDevices)
+  assert.equal(withoutDevice(withoutDevice(twoDevices, 'Dad-Phone')!, 'mum'), server)
+})
+
+test('withoutDevice stops at the blank line that ends the block', () => {
+  const conf = `${server}\n### Client mum\n[Peer]\nPublicKey = mumpublic\nAllowedIPs = 10.66.66.2/32\n\n[Peer]\nPublicKey = other\nAllowedIPs = 10.66.66.3/32\n`
+  assert.equal(withoutDevice(conf, 'mum'), `${server}\n[Peer]\nPublicKey = other\nAllowedIPs = 10.66.66.3/32\n`)
+})
+
+test('withoutDevice is null for a name with no block, in any other case too', () => {
+  assert.equal(withoutDevice(twoDevices, 'tablet'), null)
+  assert.equal(withoutDevice(twoDevices, 'MUM'), null)
+})
+
+test('removeScript is valid sh that writes wg0.conf privately, deletes the device\'s config, then applies the peers live', () => {
+  const script = removeScript('mum', 'WG0\n')
+  execFileSync('sh', ['-n'], { input: script })
+  assert.equal(script, `set -eu
+umask 077
+cat > /etc/wireguard/wg0.conf.tmp <<'EOF'
+WG0
+EOF
+mv /etc/wireguard/wg0.conf.tmp /etc/wireguard/wg0.conf
+rm -f /etc/wireguard/clients/mum.conf
 wg-quick strip wg0 | wg syncconf wg0 /dev/stdin
 `)
 })
@@ -133,7 +177,7 @@ test('addDevice writes the next free address to the node, with keys made on the 
   answer(twoDevices)
   assert.equal(await addDevice(node, 'tablet', 'hub.example'), 'added')
   const [, write] = sshLog().split(/^ssh .*root@10\.99\.0\.2 sh\n/m)
-  assert.equal(write, writeScript('tablet', twoDevices + peer('tablet', 'public2', 3), clientConf('private2', 3, 'publicserver', 'hub.example:51822')))
+  assert.equal(write, addScript('tablet', twoDevices + peer('tablet', 'public2', 3), clientConf('private2', 3, 'publicserver', 'hub.example:51822')))
 })
 
 test('addDevice runs one change at a time on a node', async () => {
@@ -157,6 +201,30 @@ test('addDevice refuses once the node has no free address, writing nothing', asy
 test('addDevice is offline when the node cannot be reached', async () => {
   answer('', 255)
   assert.equal(await addDevice(node, 'tablet', 'hub.example'), 'offline')
+})
+
+test('removeDevice writes wg0.conf without the device to the node', async () => {
+  answer(twoDevices)
+  assert.equal(await removeDevice(node, 'mum'), 'removed')
+  const [, write] = sshLog().split(/^ssh .*root@10\.99\.0\.2 sh\n/m)
+  assert.equal(write, removeScript('mum', withoutDevice(twoDevices, 'mum')!))
+})
+
+test('removeDevice is missing for a device not on the node, writing nothing', async () => {
+  answer(twoDevices)
+  assert.equal(await removeDevice(node, 'tablet'), 'missing')
+  assert.equal(sshLog().match(/^ssh /gm)?.length, 1)
+})
+
+test('removeDevice is offline when the node cannot be reached', async () => {
+  answer('', 255)
+  assert.equal(await removeDevice(node, 'mum'), 'offline')
+})
+
+test('removeDevice waits for an add on the same node', async () => {
+  answer(twoDevices)
+  await Promise.all([addDevice(node, 'tablet', 'hub.example'), removeDevice(node, 'mum')])
+  assert.deepEqual(sshLog().match(/^ssh .* (cat \/etc\/wireguard\/wg0\.conf|sh)$/gm)?.map((line) => line.split(' ').at(-1)), ['/etc/wireguard/wg0.conf', 'sh', '/etc/wireguard/wg0.conf', 'sh'])
 })
 
 test('showDevice reads the device\'s config on the node', async () => {

@@ -66,6 +66,28 @@ export async function node(name: string) {
   return (await data()).nodes.find((node: { name: string }) => node.name === name)
 }
 
+// The machines have no bash for wg-quick, so this does by hand what wg-quick would: wg takes
+// the conf without the lines only wg-quick reads, and two half routes send everything else
+// through the tunnel, while the hub stays reachable the usual way.
+export function connect(machine: string, conf: string) {
+  return sh(machine, `set -e
+umask 077
+cat > /tmp/device.conf
+grep -v -e '^Address = ' -e '^DNS = ' -e '^MTU = ' /tmp/device.conf > /tmp/device.wg
+ip link add wgc type wireguard
+wg setconf wgc /tmp/device.wg
+ip addr add $(sed -n 's/^Address = //p' /tmp/device.conf) dev wgc
+ip link set wgc mtu $(sed -n 's/^MTU = //p' /tmp/device.conf) up
+gateway=$(ip route show default | cut -d ' ' -f 3)
+if [ -n "$gateway" ]; then ip route add 172.30.0.10/32 via "$gateway"; fi
+ip route add 0.0.0.0/1 dev wgc
+ip route add 128.0.0.0/1 dev wgc`, conf)
+}
+
+export function disconnect(machine: string) {
+  return sh(machine, 'ip link del wgc; ip route del 172.30.0.10/32 2>/dev/null; rm -f /tmp/device.conf /tmp/device.wg')
+}
+
 export function page(path: string, cookie = '') {
   return output('tablet', `${curl} -H 'cookie: ${cookie}' ${hub}${path}`)
 }

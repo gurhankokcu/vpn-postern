@@ -94,7 +94,7 @@ export function nodePage({ node, devices, message = '', deviceName = '' }: NodeV
   const rows = (devices ?? []).map((device) => `<tr>
 <td><b>${escapeHtml(device.name)}</b></td>
 <td class="mono">10.66.66.${device.x}</td>
-<td class="action"><a class="btn ghost" href="/nodes/${node.n}/devices/${encodeURIComponent(device.name)}">Show</a></td>
+<td class="action"><a class="btn ghost" href="/nodes/${node.n}/devices/${encodeURIComponent(device.name)}">Show</a><form method="post" action="/nodes/${node.n}/devices/${encodeURIComponent(device.name)}/remove" data-confirm="Remove ${escapeHtml(device.name)}? It stops connecting until you add it again and scan its new QR code." onsubmit="return confirm(this.dataset.confirm)"><button class="btn ghost">Remove</button></form></td>
 </tr>`).join('')
 
   const body = devices === null

@@ -52,9 +52,23 @@ AllowedIPs = 0.0.0.0/0, ::/0
 `
 }
 
+export function withoutDevice(conf: string, name: string) {
+  const lines = conf.split('\n')
+  const start = lines.indexOf(`### Client ${name}`)
+  if (start === -1) {
+    return null
+  }
+  let end = start
+  while (end < lines.length && lines[end] !== '') {
+    end++
+  }
+  const from = lines[start - 1] === '' ? start - 1 : start
+  return [...lines.slice(0, from), ...lines.slice(end)].join('\n')
+}
+
 // Each file lands whole through a rename, and syncconf applies the peers without
 // dropping devices already connected.
-export function writeScript(name: string, conf: string, client: string) {
+export function addScript(name: string, conf: string, client: string) {
   return `set -eu
 umask 077
 mkdir -p ${clients}
@@ -64,6 +78,17 @@ cat > ${server}.tmp <<'EOF'
 ${conf}EOF
 mv ${clients}/${name}.conf.tmp ${clients}/${name}.conf
 mv ${server}.tmp ${server}
+wg-quick strip wg0 | wg syncconf wg0 /dev/stdin
+`
+}
+
+export function removeScript(name: string, conf: string) {
+  return `set -eu
+umask 077
+cat > ${server}.tmp <<'EOF'
+${conf}EOF
+mv ${server}.tmp ${server}
+rm -f ${clients}/${name}.conf
 wg-quick strip wg0 | wg syncconf wg0 /dev/stdin
 `
 }
@@ -105,8 +130,25 @@ async function add(node: Node, name: string, host: string) {
   const serverKey = publicKey(conf.match(/^PrivateKey = (.+)$/m)?.[1] ?? '')
   const keys = keypair()
   const client = clientConf(keys.privateKey, x, serverKey, `${host}:${port(node)}`)
-  const write = await ssh(node, 'sh', writeScript(name, conf + peer(name, keys.publicKey, x), client))
+  const write = await ssh(node, 'sh', addScript(name, conf + peer(name, keys.publicKey, x), client))
   return write.code === 0 ? 'added' : 'offline'
+}
+
+export function removeDevice(node: Node, name: string) {
+  return queued(node, () => remove(node, name))
+}
+
+async function remove(node: Node, name: string) {
+  const read = await ssh(node, `cat ${server}`)
+  if (read.code !== 0) {
+    return 'offline'
+  }
+  const conf = withoutDevice(read.stdout, name)
+  if (conf === null) {
+    return 'missing'
+  }
+  const write = await ssh(node, 'sh', removeScript(name, conf))
+  return write.code === 0 ? 'removed' : 'offline'
 }
 
 export async function showDevice(node: Node, name: string) {

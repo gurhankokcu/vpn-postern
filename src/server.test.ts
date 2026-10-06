@@ -376,6 +376,38 @@ test('an unknown device or node is not found', async () => {
   assert.equal((await request('/nodes/9/devices', { method: 'POST', headers: { cookie } })).status, 404)
 })
 
+function removeDevice(cookie: string, name: string) {
+  return request(`/nodes/1/devices/${name}/remove`, { method: 'POST', headers: { cookie } })
+}
+
+test('removing a device drops it from the node and goes back to the node', async () => {
+  answer(wg0)
+  const res = await removeDevice(await session(), 'mum')
+  assert.equal(res.status, 303)
+  assert.equal(res.headers.get('location'), '/nodes/1')
+  const log = readFileSync(join(dir, 'ssh.log'), 'utf8')
+  assert.doesNotMatch(log.split(/ sh\n/)[1], /### Client mum/)
+  assert.match(log, /^rm -f \/etc\/wireguard\/clients\/mum\.conf$/m)
+})
+
+test('removing a device from an offline node says the node is offline, trying it only once', async () => {
+  answer('', 255)
+  const res = await removeDevice(await session(), 'mum')
+  assert.equal(res.status, 503)
+  assert.match(await res.text(), /<h3>home is offline<\/h3>/)
+  assert.equal(readFileSync(join(dir, 'ssh.log'), 'utf8').match(/^ssh /gm)?.length, 1)
+})
+
+test('removing an unknown device, or one on an unknown node, is not found', async () => {
+  answer(wg0)
+  const cookie = await session()
+  for (const path of ['/nodes/1/devices/tablet/remove', '/nodes/9/devices/mum/remove', '/nodes/1/devices/mum%20phone/remove', '/nodes/1/devices//remove']) {
+    const res = await request(path, { method: 'POST', headers: { cookie } })
+    assert.equal(res.status, 404, path)
+    assert.match(await res.text(), /<h3>Not found<\/h3>/)
+  }
+})
+
 test('a password under 12 characters is refused', async () => {
   save({ password: hash('x'.repeat(11)), nodes, joins: [] })
   assert.equal((await login(`password=${'x'.repeat(11)}`)).status, 401)
@@ -387,7 +419,7 @@ test('a password over 256 characters is refused', async () => {
 })
 
 test('without a session every other page goes to login', async () => {
-  for (const [method, path] of [['GET', '/'], ['GET', '/missing'], ['POST', '/logout'], ['POST', '/'], ['POST', '/nodes'], ['POST', '/nodes/1/remove'], ['GET', '/nodes/1'], ['POST', '/nodes/1/devices'], ['GET', '/nodes/1/devices/mum'], ['GET', '/nodes/1/devices/mum.conf']]) {
+  for (const [method, path] of [['GET', '/'], ['GET', '/missing'], ['POST', '/logout'], ['POST', '/'], ['POST', '/nodes'], ['POST', '/nodes/1/remove'], ['GET', '/nodes/1'], ['POST', '/nodes/1/devices'], ['GET', '/nodes/1/devices/mum'], ['GET', '/nodes/1/devices/mum.conf'], ['POST', '/nodes/1/devices/mum/remove']]) {
     const res = await request(path, { method })
     assert.equal(res.status, 303)
     assert.equal(res.headers.get('location'), '/login')

@@ -122,8 +122,14 @@ test('node page lists each device with its address and a link to its QR code', (
   assert.match(html, /<a class="back" href="\/">← Nodes<\/a>/)
   assert.match(html, /<h2>home<\/h2><span class="pill">2 total<\/span>/)
   assert.match(html, /<th>Name<\/th><th>Address<\/th><th><\/th><\/tr>/)
-  assert.match(html, /<td><b>mum<\/b><\/td>\n<td class="mono">10\.66\.66\.2<\/td>\n<td class="action"><a class="btn ghost" href="\/nodes\/2\/devices\/mum">Show<\/a><\/td>/)
+  assert.match(html, /<td><b>mum<\/b><\/td>\n<td class="mono">10\.66\.66\.2<\/td>\n<td class="action"><a class="btn ghost" href="\/nodes\/2\/devices\/mum">Show<\/a><form /)
   assert.match(html, /<td><b>dad<\/b><\/td>\n<td class="mono">10\.66\.66\.3<\/td>/)
+})
+
+test('node page has a remove button on every device, asking first', () => {
+  const html = nodePage({ node, devices: [{ name: 'mum', x: 2 }, { name: 'dad', x: 3 }] })
+  assert.match(html, /Show<\/a><form method="post" action="\/nodes\/2\/devices\/mum\/remove" data-confirm="Remove mum\? It stops connecting until you add it again and scan its new QR code\." onsubmit="return confirm\(this\.dataset\.confirm\)"><button class="btn ghost">Remove<\/button><\/form><\/td>\n<\/tr>/)
+  assert.match(html, /action="\/nodes\/2\/devices\/dad\/remove" data-confirm="Remove dad\?/)
 })
 
 test('node page with no devices says so', () => {
