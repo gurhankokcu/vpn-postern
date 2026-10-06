@@ -69,6 +69,10 @@ test('the join script moves a kept wg0.conf to port 51820 + n', () => {
   assert.match(script, /^  sed -i 's\/\^ListenPort = \.\*\/ListenPort = 51827\/' \/etc\/wireguard\/wg0\.conf$/m)
 })
 
+test('the join script moves kept device configs to port 51820 + n', () => {
+  assert.match(script, /^  for client in \/etc\/wireguard\/clients\/\*\.conf; do\n    if \[ -f "\$client" \]; then\n      sed -i '\/\^Endpoint = \/s\/:\[0-9\]\*\$\/:51827\/' "\$client"\n    fi\n  done$/m)
+})
+
 test('the join script starts postern0, ssh and wg0, now and on every boot', () => {
   assert.match(script, /^  systemctl enable wg-quick@postern0\n  systemctl restart wg-quick@postern0\n  systemctl enable --now ssh\n  systemctl enable wg-quick@wg0\n  systemctl restart wg-quick@wg0$/m)
 })

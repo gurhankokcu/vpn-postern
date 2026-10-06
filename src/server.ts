@@ -4,11 +4,12 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createServer } from 'node:https'
 import { join } from 'node:path'
 import { clear, expiredCookie, fail, locked, sessionCookie, valid, verify } from './auth.ts'
-import { dir, load } from './data.ts'
-import { field } from './fields.ts'
+import { dir, load, type Node } from './data.ts'
+import { addDevice, listDevices, qr, showDevice } from './devices.ts'
+import { field, fields } from './fields.ts'
 import { joinScript } from './join.ts'
 import { addNode, dropJoin, findJoin, removeNode } from './nodes.ts'
-import { loginPage, nodesPage, notFoundPage } from './pages.ts'
+import { devicePage, loginPage, nodePage, nodesPage, notFoundPage } from './pages.ts'
 import { handshakes, hubKey } from './wg.ts'
 
 const css = readFileSync(join(import.meta.dirname, 'style.css'))
@@ -37,9 +38,21 @@ function pin() {
   return createHash('sha256').update(key).digest('base64')
 }
 
+function hostname(req: IncomingMessage) {
+  return (req.headers.host ?? '').replace(/:\d+$/, '')
+}
+
 function home(req: IncomingMessage, message = '', nodeName = '') {
   const { nodes, joins } = load()
   return nodesPage({ nodes, joins, handshakes: handshakes(), host: req.headers.host ?? '', pin: pin(), message, nodeName })
+}
+
+function findNode(n: string | undefined) {
+  return load().nodes.find((node) => node.n === Number(n))
+}
+
+async function nodeHome(node: Node, message = '', deviceName = '') {
+  return nodePage({ node, devices: await listDevices(node), message, deviceName })
 }
 
 async function handle(req: IncomingMessage, res: ServerResponse) {
@@ -70,9 +83,8 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     if (!found) {
       return send(res, 404, 'This join command is used or expired.\n', 'text/plain')
     }
-    const host = (req.headers.host ?? '').replace(/:\d+$/, '')
     const sshKey = readFileSync(join(dir, 'id_ed25519.pub'), 'utf8').trim()
-    const script = joinScript(found, { host, publicKey: hubKey(), sshKey })
+    const script = joinScript(found, { host: hostname(req), publicKey: hubKey(), sshKey })
     dropJoin(token)
     return send(res, 200, script, 'text/plain')
   }
@@ -108,6 +120,47 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
       return send(res, 404, notFoundPage())
     }
     return redirect(res, '/')
+  }
+  const [, viewN] = route.match(/^GET \/nodes\/(\d+)$/) ?? []
+  const viewing = findNode(viewN)
+  if (viewing) {
+    return send(res, 200, await nodeHome(viewing))
+  }
+  const [, addN] = route.match(/^POST \/nodes\/(\d+)\/devices$/) ?? []
+  const adding = findNode(addN)
+  if (adding) {
+    const params = await form(req)
+    const name = field(params, 'deviceName')
+    if (name === null) {
+      return send(res, 400, await nodeHome(adding, 'A device name is 1 to 32 letters, digits, - or _.', params.get('deviceName') ?? ''))
+    }
+    const result = await addDevice(adding, name, hostname(req))
+    if (result === 'taken') {
+      return send(res, 409, await nodeHome(adding, 'Another device on this node already has that name.', name))
+    }
+    if (result === 'full') {
+      return send(res, 409, await nodeHome(adding, 'All 253 device addresses on this node are in use.', name))
+    }
+    if (result === 'offline') {
+      return send(res, 503, nodePage({ node: adding, devices: null, deviceName: name }))
+    }
+    return redirect(res, `/nodes/${adding.n}/devices/${name}`)
+  }
+  const [, showN, name = '', download] = route.match(/^GET \/nodes\/(\d+)\/devices\/([^/]+?)(\.conf)?$/) ?? []
+  const showing = fields.deviceName.test(name) ? findNode(showN) : undefined
+  if (showing) {
+    const conf = await showDevice(showing, name)
+    if (conf === 'missing') {
+      return send(res, 404, notFoundPage())
+    }
+    if (download && conf === 'offline') {
+      return send(res, 503, `${showing.name} is offline.\n`, 'text/plain')
+    }
+    if (download) {
+      res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'content-disposition': `attachment; filename="${name}.conf"` })
+      return res.end(conf)
+    }
+    return send(res, 200, devicePage({ node: showing, name, svg: conf === 'offline' ? null : qr(conf) }))
   }
   send(res, 404, notFoundPage())
 }

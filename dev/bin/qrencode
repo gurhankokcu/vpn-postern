@@ -1,0 +1,8 @@
+#!/bin/sh
+# Stands in for qrencode off the hub: logs each call and its stdin, and prints an svg
+# after the XML prolog qrencode writes.
+dir=${POSTERN_DIR:-.dev}
+echo "qrencode $*" >> "$dir/qrencode.log"
+cat >> "$dir/qrencode.log"
+echo '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+echo '<svg>qr</svg>'

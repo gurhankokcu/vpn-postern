@@ -253,6 +253,129 @@ test('removing an unknown node is not found, changing nothing', async () => {
   assert.deepEqual(load().nodes, nodes)
 })
 
+const wg0 = `[Interface]
+ListenPort = 51821
+PrivateKey = privateserver
+
+### Client mum
+[Peer]
+PublicKey = mumpublic
+AllowedIPs = 10.66.66.2/32
+`
+
+function answer(stdout: string, code = 0) {
+  rmSync(join(dir, 'ssh.log'), { force: true })
+  writeFileSync(join(dir, 'ssh.out'), stdout)
+  writeFileSync(join(dir, 'ssh.code'), String(code))
+}
+
+function addDevice(cookie: string, body: string) {
+  return request('/nodes/1/devices', {
+    method: 'POST',
+    headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' },
+    body,
+  })
+}
+
+test('a node page lists the devices on the node', async () => {
+  answer(wg0)
+  const res = await request('/nodes/1', { headers: { cookie: await session() } })
+  assert.equal(res.status, 200)
+  const html = await res.text()
+  assert.match(html, /<h2>home<\/h2><span class="pill">1 total<\/span>/)
+  assert.match(html, /<td><b>mum<\/b><\/td>\n<td class="mono">10\.66\.66\.2<\/td>/)
+})
+
+test('a node page says when the node is offline', async () => {
+  answer('', 255)
+  const html = await (await request('/nodes/1', { headers: { cookie: await session() } })).text()
+  assert.match(html, /<h3>home is offline<\/h3>/)
+})
+
+test('adding a device writes it to the node and shows its QR code', async () => {
+  answer(wg0)
+  const res = await addDevice(await session(), 'deviceName=tablet')
+  assert.equal(res.status, 303)
+  assert.equal(res.headers.get('location'), '/nodes/1/devices/tablet')
+  const log = readFileSync(join(dir, 'ssh.log'), 'utf8')
+  assert.match(log, /^### Client tablet\n\[Peer\]\nPublicKey = public\d+\nAllowedIPs = 10\.66\.66\.3\/32$/m)
+  assert.match(log, /^Endpoint = 127\.0\.0\.1:51821$/m)
+})
+
+test('a device name against the rule is refused with a note, reaching no node', async () => {
+  const cookie = await session()
+  for (const body of ['', 'deviceName=', 'deviceName=mum%20phone', 'deviceName=..%2Fmum']) {
+    answer(wg0)
+    const res = await addDevice(cookie, body)
+    assert.equal(res.status, 400)
+    assert.match(await res.text(), /<div class="note">A device name is 1 to 32 letters, digits, - or _\.<\/div>/)
+    assert.doesNotMatch(readFileSync(join(dir, 'ssh.log'), 'utf8'), / sh\n/)
+  }
+})
+
+test('a device name already on the node, in any case, is refused with a note', async () => {
+  answer(wg0)
+  const res = await addDevice(await session(), 'deviceName=MUM')
+  assert.equal(res.status, 409)
+  const html = await res.text()
+  assert.match(html, /<div class="note">Another device on this node already has that name\.<\/div>/)
+  assert.match(html, /<input name="deviceName" value="MUM"/)
+})
+
+test('a device beyond the last address is refused with a note', async () => {
+  answer(`${wg0}${Array.from({ length: 253 }, (_, i) => `\n[Peer]\nAllowedIPs = 10.66.66.${i + 2}/32\n`).join('')}`)
+  const res = await addDevice(await session(), 'deviceName=tablet')
+  assert.equal(res.status, 409)
+  assert.match(await res.text(), /<div class="note">All 253 device addresses on this node are in use\.<\/div>/)
+})
+
+test('adding a device to an offline node says the node is offline, trying it only once', async () => {
+  answer('', 255)
+  const res = await addDevice(await session(), 'deviceName=tablet')
+  assert.equal(res.status, 503)
+  const html = await res.text()
+  assert.match(html, /<h3>home is offline<\/h3>/)
+  assert.match(html, /<input name="deviceName" value="tablet"/)
+  assert.equal(readFileSync(join(dir, 'ssh.log'), 'utf8').match(/^ssh /gm)?.length, 1)
+})
+
+test('a device page shows the device\'s QR code', async () => {
+  answer('CLIENT\n')
+  const res = await request('/nodes/1/devices/mum', { headers: { cookie: await session() } })
+  assert.equal(res.status, 200)
+  const html = await res.text()
+  assert.match(html, /<div class="qr"><svg>qr<\/svg>\n<\/div>/)
+  assert.match(html, /href="\/nodes\/1\/devices\/mum\.conf" download/)
+})
+
+test('a device\'s .conf downloads as a file', async () => {
+  answer('CLIENT\n')
+  const res = await request('/nodes/1/devices/mum.conf', { headers: { cookie: await session() } })
+  assert.equal(res.status, 200)
+  assert.equal(res.headers.get('content-disposition'), 'attachment; filename="mum.conf"')
+  assert.equal(await res.text(), 'CLIENT\n')
+})
+
+test('a device on an offline node says so, and its .conf is unavailable', async () => {
+  answer('', 255)
+  const cookie = await session()
+  assert.match(await (await request('/nodes/1/devices/mum', { headers: { cookie } })).text(), /<h3>home is offline<\/h3>/)
+  const res = await request('/nodes/1/devices/mum.conf', { headers: { cookie } })
+  assert.equal(res.status, 503)
+  assert.equal(await res.text(), 'home is offline.\n')
+})
+
+test('an unknown device or node is not found', async () => {
+  answer('', 1)
+  const cookie = await session()
+  for (const path of ['/nodes/1/devices/missing', '/nodes/1/devices/missing.conf', '/nodes/9', '/nodes/9/devices/mum', '/nodes/1/devices/mum%20phone', '/nodes/1/devices/', '/nodes/x']) {
+    const res = await request(path, { headers: { cookie } })
+    assert.equal(res.status, 404, path)
+    assert.match(await res.text(), /<h3>Not found<\/h3>/)
+  }
+  assert.equal((await request('/nodes/9/devices', { method: 'POST', headers: { cookie } })).status, 404)
+})
+
 test('a password under 12 characters is refused', async () => {
   save({ password: hash('x'.repeat(11)), nodes, joins: [] })
   assert.equal((await login(`password=${'x'.repeat(11)}`)).status, 401)
@@ -264,7 +387,7 @@ test('a password over 256 characters is refused', async () => {
 })
 
 test('without a session every other page goes to login', async () => {
-  for (const [method, path] of [['GET', '/'], ['GET', '/missing'], ['POST', '/logout'], ['POST', '/'], ['POST', '/nodes'], ['POST', '/nodes/1/remove']]) {
+  for (const [method, path] of [['GET', '/'], ['GET', '/missing'], ['POST', '/logout'], ['POST', '/'], ['POST', '/nodes'], ['POST', '/nodes/1/remove'], ['GET', '/nodes/1'], ['POST', '/nodes/1/devices'], ['GET', '/nodes/1/devices/mum'], ['GET', '/nodes/1/devices/mum.conf']]) {
     const res = await request(path, { method })
     assert.equal(res.status, 303)
     assert.equal(res.headers.get('location'), '/login')

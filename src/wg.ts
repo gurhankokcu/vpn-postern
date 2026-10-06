@@ -5,9 +5,13 @@ function run(command: string, args: string[], input = '') {
   return execFileSync(command, args, { input, encoding: 'utf8' }).trim()
 }
 
+export function publicKey(privateKey: string) {
+  return run('wg', ['pubkey'], privateKey)
+}
+
 export function keypair() {
   const privateKey = run('wg', ['genkey'])
-  return { privateKey, publicKey: run('wg', ['pubkey'], privateKey) }
+  return { privateKey, publicKey: publicKey(privateKey) }
 }
 
 export function hubKey() {

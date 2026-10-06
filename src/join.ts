@@ -43,6 +43,11 @@ PostDown = nft delete table inet postern
 EOF
   fi
   sed -i 's/^ListenPort = .*/ListenPort = ${port(join)}/' /etc/wireguard/wg0.conf
+  for client in /etc/wireguard/clients/*.conf; do
+    if [ -f "$client" ]; then
+      sed -i '/^Endpoint = /s/:[0-9]*$/:${port(join)}/' "$client"
+    fi
+  done
 
   systemctl enable wg-quick@postern0
   systemctl restart wg-quick@postern0
