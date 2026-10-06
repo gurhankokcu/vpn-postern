@@ -7,6 +7,7 @@ let cookie = ''
 let command = ''
 let n = 0
 let publicKey = ''
+let serverKey = ''
 
 before(async () => {
   assert.equal((await sh('hub', `printf '%s\\n' '${password}' | postern set-password`)).code, 0)
@@ -36,6 +37,10 @@ async function join() {
   assert.match(await row(), /<span class="pill online">online<\/span>/)
 }
 
+async function wg0() {
+  return { key: await output('work-pi', 'wg show wg0 public-key'), port: Number(await output('work-pi', 'wg show wg0 listen-port')) }
+}
+
 async function remove() {
   assert.equal(await post(`/nodes/${n}/remove`, cookie, ''), 303)
   assert.equal(await node(), undefined)
@@ -56,6 +61,9 @@ test('the tablet adds work-pi again, it gets the same address back and joins', a
   await add()
   assert.equal(n, removed)
   await join()
+  const { key, port } = await wg0()
+  serverKey = key
+  assert.equal(port, 51820 + n)
 })
 
 test('the tablet removes the joined work-pi, and the hub can no longer reach it', async () => {
@@ -67,6 +75,18 @@ test('work-pi, re-added, joins again, replacing its old config', async () => {
   await add()
   await join()
   assert.equal((await sh('hub', `ping -c 3 -W 5 10.99.0.${n}`)).code, 0)
+  assert.deepEqual(await wg0(), { key: serverKey, port: 51820 + n })
+})
+
+test('work-pi, re-added under another number, keeps its wg0 key and listens on its new port', async () => {
+  const removed = n
+  await remove()
+  assert.equal(await post('/nodes', cookie, 'nodeName=spare'), 303)
+  await add()
+  assert.notEqual(n, removed)
+  await join()
+  assert.deepEqual(await wg0(), { key: serverKey, port: 51820 + n })
+  assert.equal(await post(`/nodes/${(await node('spare')).n}/remove`, cookie, ''), 303)
 })
 
 test('home-pi is untouched by all of this', async () => {

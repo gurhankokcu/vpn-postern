@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { before, test } from 'node:test'
-import { login, output, page, post, sh } from './sim.ts'
+import { login, output, page, post, restart, sh } from './sim.ts'
 
 const password = 'join node e2e'
 let cookie = ''
@@ -76,12 +76,33 @@ test('the hub runs commands on home-pi over SSH', async () => {
   assert.match(out, /home-pi$/)
 })
 
-test('home-pi starts postern0 and ssh on every boot', async () => {
-  assert.equal(await output('home-pi', 'systemctl is-enabled wg-quick@postern0 ssh'), 'enabled\nenabled')
+test('home-pi starts postern0, ssh and wg0 on every boot', async () => {
+  assert.equal(await output('home-pi', 'systemctl is-enabled wg-quick@postern0 ssh wg-quick@wg0'), 'enabled\nenabled\nenabled')
+})
+
+test('home-pi runs wg0 on its port, forwarding and masquerading its users out of anything but wg0 and postern0', async () => {
+  assert.equal(await output('home-pi', 'wg show wg0 listen-port'), String(51820 + (await node()).n))
+  assert.match(await output('home-pi', 'ip -o -4 addr show wg0'), /inet 10\.66\.66\.1\/24 /)
+  assert.equal(await output('home-pi', 'ip -o link show wg0 | grep -o "mtu [0-9]*"'), 'mtu 1340')
+  assert.equal(await output('home-pi', 'sysctl -n net.ipv4.ip_forward'), '1')
+  assert.match(await output('home-pi', 'nft list table inet postern'), /ip saddr 10\.66\.66\.0\/24 oifname != \{ "wg0", "postern0" \} masquerade/)
 })
 
 test('the join command works once', async () => {
   assert.equal((await sh('home-pi', fetchOnly())).code, 22)
   assert.ok(!(await data()).joins.some((join: { token: string }) => join.token === token()))
   assert.ok(!(await page('/', cookie)).includes(`/join/${token()}`))
+})
+
+test('after a reboot home-pi brings postern0 and wg0 back by itself', async () => {
+  await restart('home-pi')
+  const active = await output('home-pi', [
+    'for i in $(seq 30); do systemctl is-active -q wg-quick@postern0 2>/dev/null && systemctl is-active -q wg-quick@wg0 2>/dev/null && break; sleep 1; done',
+    'systemctl is-active wg-quick@postern0 wg-quick@wg0',
+  ].join('; '))
+  assert.equal(active, 'active\nactive')
+  assert.equal(await output('home-pi', 'wg show wg0 listen-port'), String(51820 + (await node()).n))
+  assert.equal(await output('home-pi', 'sysctl -n net.ipv4.ip_forward'), '1')
+  assert.match(await output('home-pi', 'nft list table inet postern'), /ip saddr 10\.66\.66\.0\/24 oifname != \{ "wg0", "postern0" \} masquerade/)
+  assert.equal((await sh('hub', `ping -c 3 -W 5 ${await address()}`)).code, 0)
 })
