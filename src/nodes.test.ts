@@ -8,11 +8,14 @@ process.env.POSTERN_DIR = mkdtempSync(join(tmpdir(), 'postern-'))
 process.env.PATH = `${join(import.meta.dirname, '..', 'dev', 'bin')}:${process.env.PATH}`
 const { load, save } = await import('./data.ts')
 const { addNode, dropJoin, findJoin, removeNode } = await import('./nodes.ts')
+const { ruleset } = await import('./nft.ts')
 const log = join(process.env.POSTERN_DIR, 'wg.log')
+const table = join(process.env.POSTERN_DIR, 'nft')
 
 beforeEach(() => {
   save({ password: 'salt:key', nodes: [], joins: [] })
   rmSync(log, { force: true })
+  rmSync(table, { force: true })
 })
 
 test('the first node is n 2, as the hub is 10.99.0.1', () => {
@@ -68,6 +71,19 @@ test('a refused node makes no keys and no peer', () => {
   assert.equal(existsSync(log), false)
 })
 
+test('adding a node rebuilds the forwards from data.json', () => {
+  addNode('home')
+  addNode('work')
+  assert.equal(readFileSync(table, 'utf8'), ruleset(load().nodes))
+})
+
+test('a refused node leaves the forwards alone', () => {
+  addNode('home')
+  rmSync(table)
+  assert.equal(addNode('HOME'), 'taken')
+  assert.equal(existsSync(table), false)
+})
+
 test('the node keeps its public key, its join the private one', () => {
   addNode('home')
   const { nodes, joins } = load()
@@ -117,6 +133,13 @@ test('removing a node drops it and its join, keeps the rest, and drops expired j
   assert.deepEqual(load(), { password: 'salt:key', nodes: [nodes[1]], joins: [joins[1]] })
 })
 
+test('removing a node rebuilds the forwards without it', () => {
+  addNode('home')
+  addNode('work')
+  removeNode(2)
+  assert.equal(readFileSync(table, 'utf8'), ruleset([{ name: 'work', n: 3, publicKey: 'public5' }]))
+})
+
 test('a removed node frees its n and its name', () => {
   addNode('home')
   addNode('work')
@@ -125,12 +148,14 @@ test('a removed node frees its n and its name', () => {
   assert.deepEqual(load().nodes.map((node) => [node.name, node.n]), [['work', 3], ['home', 2]])
 })
 
-test('removing an unknown node runs no wg and changes nothing', () => {
+test('removing an unknown node runs no wg and no nft, and changes nothing', () => {
   addNode('home')
   rmSync(log)
+  rmSync(table)
   const before = load()
   assert.equal(removeNode(3), 'missing')
   assert.equal(existsSync(log), false)
+  assert.equal(existsSync(table), false)
   assert.deepEqual(load(), before)
 })
 

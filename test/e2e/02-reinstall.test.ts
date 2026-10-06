@@ -130,7 +130,7 @@ test('a reset asks for the password until it is typed twice the same', async () 
 })
 
 test('a reset erases the data', async () => {
-  assert.equal(await output('hub', 'ls /var/lib/postern'), 'data.json\nid_ed25519\nid_ed25519.pub\ntls.crt\ntls.key')
+  assert.equal(await output('hub', 'ls /var/lib/postern'), 'data.json\nid_ed25519\nid_ed25519.pub\npostern.nft\ntls.crt\ntls.key')
   assert.equal(await output('hub', 'systemctl is-active postern wg-quick@postern0'), 'active\nactive')
 })
 

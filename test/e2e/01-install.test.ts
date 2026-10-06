@@ -38,7 +38,7 @@ test('the install is owned by root, though its source is not, and has no tests',
 
 test('the data is readable by root alone', async () => {
   assert.equal(await output('hub', 'stat -c %a /var/lib/postern /var/lib/postern/data.json /etc/wireguard/postern0.conf'), '700\n600\n600')
-  assert.equal(await output('hub', 'ls /var/lib/postern'), 'data.json\nid_ed25519\nid_ed25519.pub\ntls.crt\ntls.key')
+  assert.equal(await output('hub', 'ls /var/lib/postern'), 'data.json\nid_ed25519\nid_ed25519.pub\npostern.nft\ntls.crt\ntls.key')
 })
 
 test('the tablet finds the login page', async () => {

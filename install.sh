@@ -135,6 +135,8 @@ EOF
     )
   fi
   systemctl enable --now wg-quick@postern0
+  echo 'net.ipv4.ip_forward = 1' > /etc/sysctl.d/99-postern.conf
+  sysctl -q -p /etc/sysctl.d/99-postern.conf
   if [ ! -f "$data/tls.crt" ]; then
     postern cert
   fi
@@ -149,6 +151,7 @@ After=network-online.target wg-quick@postern0.service
 Wants=network-online.target
 
 [Service]
+ExecStartPre=/usr/local/bin/postern nft
 ExecStart=/usr/local/bin/postern server
 Restart=always
 

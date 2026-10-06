@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { live, load, save } from './data.ts'
+import { rebuild } from './nft.ts'
 import { addPeer, keypair, removePeer } from './wg.ts'
 
 const joinMs = 60 * 60 * 1000
@@ -21,6 +22,7 @@ export function addNode(name: string) {
   const join = { token: randomBytes(32).toString('hex'), n, privateKey, expires: Date.now() + joinMs }
   addPeer(node)
   save({ ...data, nodes: [...data.nodes, node], joins: [...live(data.joins), join] })
+  rebuild()
   return 'added'
 }
 
@@ -32,6 +34,7 @@ export function removeNode(n: number) {
   }
   removePeer(node)
   save({ ...data, nodes: data.nodes.filter((other) => other.n !== n), joins: live(data.joins).filter((join) => join.n !== n) })
+  rebuild()
   return 'removed'
 }
 

@@ -1,0 +1,4 @@
+#!/bin/sh
+# Stands in for nft off the hub: keeps the last ruleset it was given in $dir/nft.
+dir=${POSTERN_DIR:-.dev}
+cp "$2" "$dir/nft"

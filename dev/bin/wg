@@ -1,13 +1,14 @@
 #!/bin/sh
 # Stands in for wg off the hub: logs each call, numbers each key by the log line that made it,
-# and reads peer handshakes from $POSTERN_DIR/handshakes.
-echo "wg $*" >> "$POSTERN_DIR/wg.log"
+# and reads peer handshakes from $dir/handshakes.
+dir=${POSTERN_DIR:-.dev}
+echo "wg $*" >> "$dir/wg.log"
 case $1 in
-  genkey) echo "private$(wc -l < "$POSTERN_DIR/wg.log" | tr -d ' ')" ;;
+  genkey) echo "private$(wc -l < "$dir/wg.log" | tr -d ' ')" ;;
   pubkey) sed 's/^private/public/' ;;
   show)
     case $3 in
       public-key) echo 'hubpublic' ;;
-      latest-handshakes) cat "$POSTERN_DIR/handshakes" 2>/dev/null || true ;;
+      latest-handshakes) cat "$dir/handshakes" 2>/dev/null || true ;;
     esac ;;
 esac
