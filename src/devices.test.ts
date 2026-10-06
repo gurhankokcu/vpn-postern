@@ -9,7 +9,7 @@ process.env.POSTERN_DIR = mkdtempSync(join(tmpdir(), 'postern-'))
 process.env.PATH = `${join(import.meta.dirname, '..', 'dev', 'bin')}:${process.env.PATH}`
 const { addDevice, addScript, clientConf, devices, freeX, listDevices, peer, qr, removeDevice, removeScript, showDevice, withoutDevice } = await import('./devices.ts')
 const dir = process.env.POSTERN_DIR
-const node = { name: 'home', n: 2, publicKey: 'key' }
+const node = { name: 'home', n: 2, port: 443, publicKey: 'key' }
 
 const server = `[Interface]
 Address = 10.66.66.1/24
@@ -173,11 +173,11 @@ test('listDevices is null when the node cannot be reached', async () => {
   assert.equal(await listDevices(node), null)
 })
 
-test('addDevice writes the next free address to the node, with keys made on the hub', async () => {
+test('addDevice writes the next free address to the node, with keys made on the hub, dialing the node\'s port', async () => {
   answer(twoDevices)
   assert.equal(await addDevice(node, 'tablet', 'hub.example'), 'added')
   const [, write] = sshLog().split(/^ssh .*root@10\.99\.0\.2 sh\n/m)
-  assert.equal(write, addScript('tablet', twoDevices + peer('tablet', 'public2', 3), clientConf('private2', 3, 'publicserver', 'hub.example:51822')))
+  assert.equal(write, addScript('tablet', twoDevices + peer('tablet', 'public2', 3), clientConf('private2', 3, 'publicserver', 'hub.example:443')))
 })
 
 test('addDevice runs one change at a time on a node', async () => {

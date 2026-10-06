@@ -17,7 +17,7 @@ const { load, save } = await import('./data.ts')
 const { listener } = await import('./server.ts')
 
 const password = 'correct-horse'
-const nodes = [{ name: 'home', n: 1, publicKey: 'key' }]
+const nodes = [{ name: 'home', n: 1, port: 51821, publicKey: 'key' }]
 const server = createServer(listener)
 let base = ''
 
@@ -137,7 +137,7 @@ test('home lists the nodes to a logged-in admin', async () => {
 
 test('home reads the nodes afresh on every request', async () => {
   const cookie = await session()
-  save({ password: hash(password), nodes: [{ name: 'work', n: 2, publicKey: 'key' }], joins: [] })
+  save({ password: hash(password), nodes: [{ name: 'work', n: 2, port: 51822, publicKey: 'key' }], joins: [] })
   const html = await (await request('/', { headers: { cookie } })).text()
   assert.match(html, /<b>work<\/b>/)
   assert.doesNotMatch(html, /<b>home<\/b>/)
@@ -158,7 +158,7 @@ test('home shows the pinned join command with the host it was reached at', async
 })
 
 test('a join command needs no session and gets the script once', async () => {
-  save({ password: hash(password), nodes, joins: [{ token: 'abc', n: 2, privateKey: 'nodeprivate', expires: Date.now() + 60_000 }] })
+  save({ password: hash(password), nodes: [...nodes, { name: 'work', n: 2, port: 443, publicKey: 'key' }], joins: [{ token: 'abc', n: 2, privateKey: 'nodeprivate', expires: Date.now() + 60_000 }] })
   const res = await request('/join/abc')
   assert.equal(res.status, 200)
   assert.equal(res.headers.get('content-type'), 'text/plain; charset=utf-8')
@@ -166,6 +166,7 @@ test('a join command needs no session and gets the script once', async () => {
   assert.match(script, /^Address = 10\.99\.0\.2\/32\nPrivateKey = nodeprivate$/m)
   assert.match(script, /^PublicKey = hubpublic\nEndpoint = 127\.0\.0\.1:51820$/m)
   assert.match(script, /^    echo 'ssh-ed25519 AAAAhub postern' >> \/root\/\.ssh\/authorized_keys$/m)
+  assert.match(script, /\/s\/:\[0-9\]\*\$\/:443\/' "\$client"$/m)
   assert.equal((await request('/join/abc')).status, 404)
   assert.deepEqual(load().joins, [])
 })
@@ -226,7 +227,7 @@ test('a node name already in use, in any case, is refused with a note, adding no
 })
 
 test('a node beyond the last address is refused with a note, adding nothing', async () => {
-  const full = Array.from({ length: 253 }, (_, i) => ({ name: `node${i + 2}`, n: i + 2, publicKey: 'key' }))
+  const full = Array.from({ length: 253 }, (_, i) => ({ name: `node${i + 2}`, n: i + 2, port: 51822 + i, publicKey: 'key' }))
   save({ password: hash(password), nodes: full, joins: [] })
   const res = await add(await session(), 'nodeName=extra')
   assert.equal(res.status, 409)

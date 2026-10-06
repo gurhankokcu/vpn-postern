@@ -1,10 +1,10 @@
-import { address, port, type Join } from './data.ts'
+import { address, listenPort, type Join } from './data.ts'
 
 export type Hub = { host: string; publicKey: string; sshKey: string }
 
 // The node runs this as `curl … | sudo sh`, so the whole script is one function, called on
 // its last line: a download cut short runs nothing, and nothing it runs can read the rest as input.
-export function joinScript(join: Join, hub: Hub) {
+export function joinScript(join: Join, port: number, hub: Hub) {
   return `#!/bin/sh
 set -eu
 
@@ -35,17 +35,17 @@ EOF
     cat > /etc/wireguard/wg0.conf <<EOF
 [Interface]
 Address = 10.66.66.1/24
-ListenPort = ${port(join)}
+ListenPort = ${listenPort(join)}
 MTU = 1340
 PrivateKey = $(wg genkey)
 PostUp = nft add table inet postern; nft add chain inet postern postrouting '{ type nat hook postrouting priority srcnat; }'; nft add rule inet postern postrouting 'ip saddr 10.66.66.0/24 oifname != { "wg0", "postern0" } masquerade'
 PostDown = nft delete table inet postern
 EOF
   fi
-  sed -i 's/^ListenPort = .*/ListenPort = ${port(join)}/' /etc/wireguard/wg0.conf
+  sed -i 's/^ListenPort = .*/ListenPort = ${listenPort(join)}/' /etc/wireguard/wg0.conf
   for client in /etc/wireguard/clients/*.conf; do
     if [ -f "$client" ]; then
-      sed -i '/^Endpoint = /s/:[0-9]*$/:${port(join)}/' "$client"
+      sed -i '/^Endpoint = /s/:[0-9]*$/:${port}/' "$client"
     fi
   done
 

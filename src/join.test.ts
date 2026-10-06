@@ -10,6 +10,7 @@ const { joinScript } = await import('./join.ts')
 
 const script = joinScript(
   { token: 'abc', n: 7, privateKey: 'nodeprivate=', expires: 0 },
+  443,
   { host: '203.0.113.5', publicKey: 'hubpublic=', sshKey: 'ssh-ed25519 AAAAhub postern' },
 )
 
@@ -69,8 +70,8 @@ test('the join script moves a kept wg0.conf to port 51820 + n', () => {
   assert.match(script, /^  sed -i 's\/\^ListenPort = \.\*\/ListenPort = 51827\/' \/etc\/wireguard\/wg0\.conf$/m)
 })
 
-test('the join script moves kept device configs to port 51820 + n', () => {
-  assert.match(script, /^  for client in \/etc\/wireguard\/clients\/\*\.conf; do\n    if \[ -f "\$client" \]; then\n      sed -i '\/\^Endpoint = \/s\/:\[0-9\]\*\$\/:51827\/' "\$client"\n    fi\n  done$/m)
+test('the join script moves kept device configs to the node\'s port on the hub', () => {
+  assert.match(script, /^  for client in \/etc\/wireguard\/clients\/\*\.conf; do\n    if \[ -f "\$client" \]; then\n      sed -i '\/\^Endpoint = \/s\/:\[0-9\]\*\$\/:443\/' "\$client"\n    fi\n  done$/m)
 })
 
 test('the join script starts postern0, ssh and wg0, now and on every boot', () => {

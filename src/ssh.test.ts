@@ -8,7 +8,7 @@ process.env.POSTERN_DIR = mkdtempSync(join(tmpdir(), 'postern-'))
 process.env.PATH = `${join(import.meta.dirname, '..', 'dev', 'bin')}:${process.env.PATH}`
 const { forget, ssh } = await import('./ssh.ts')
 const dir = process.env.POSTERN_DIR
-const node = { name: 'home', n: 2, publicKey: 'key' }
+const node = { name: 'home', n: 2, port: 51822, publicKey: 'key' }
 
 beforeEach(() => {
   for (const file of ['ssh.log', 'ssh.out', 'ssh.code', 'known_hosts']) {

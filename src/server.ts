@@ -80,11 +80,12 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
   if (route.startsWith('GET /join/')) {
     const token = route.slice('GET /join/'.length)
     const found = findJoin(token)
-    if (!found) {
+    const node = found && findNode(String(found.n))
+    if (!found || !node) {
       return send(res, 404, 'This join command is used or expired.\n', 'text/plain')
     }
     const sshKey = readFileSync(join(dir, 'id_ed25519.pub'), 'utf8').trim()
-    const script = joinScript(found, { host: hostname(req), publicKey: hubKey(), sshKey })
+    const script = joinScript(found, node.port, { host: hostname(req), publicKey: hubKey(), sshKey })
     dropJoin(token)
     return send(res, 200, script, 'text/plain')
   }

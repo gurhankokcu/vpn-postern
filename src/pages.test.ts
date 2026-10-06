@@ -38,7 +38,7 @@ test('nodes page with no nodes says so', () => {
 })
 
 test('nodes page lists each node with its status, address and port', () => {
-  const html = nodesPage({ ...view, nodes: [{ name: 'home', n: 1, publicKey: 'key' }, { name: 'work', n: 2, publicKey: 'key' }] })
+  const html = nodesPage({ ...view, nodes: [{ name: 'home', n: 1, port: 51821, publicKey: 'key' }, { name: 'work', n: 2, port: 51822, publicKey: 'key' }] })
   assert.match(html, /2 total/)
   assert.doesNotMatch(html, /No nodes yet/)
   assert.match(html, /<th>Name<\/th><th>Status<\/th><th>Address<\/th><th>Port<\/th><th><\/th><\/tr>/)
@@ -47,7 +47,7 @@ test('nodes page lists each node with its status, address and port', () => {
 })
 
 test('nodes page shows a node online only after a handshake under 3 minutes ago', () => {
-  const nodes = [{ name: 'fresh', n: 2, publicKey: 'fresh' }, { name: 'stale', n: 3, publicKey: 'stale' }, { name: 'never', n: 4, publicKey: 'never' }]
+  const nodes = [{ name: 'fresh', n: 2, port: 51822, publicKey: 'fresh' }, { name: 'stale', n: 3, port: 51823, publicKey: 'stale' }, { name: 'never', n: 4, port: 51824, publicKey: 'never' }]
   const handshakes = new Map([['fresh', Date.now() - 179_000], ['stale', Date.now() - 181_000], ['never', 0]])
   const html = nodesPage({ ...view, nodes, handshakes })
   assert.match(html, /<b>fresh<\/b><\/td>\n<td><span class="pill online">online<\/span>/)
@@ -56,27 +56,27 @@ test('nodes page shows a node online only after a handshake under 3 minutes ago'
 })
 
 test('nodes page shows a node missing from the handshakes offline', () => {
-  assert.match(nodesPage({ ...view, nodes: [{ name: 'home', n: 2, publicKey: 'key' }] }), /<span class="pill offline">offline<\/span>/)
+  assert.match(nodesPage({ ...view, nodes: [{ name: 'home', n: 2, port: 51822, publicKey: 'key' }] }), /<span class="pill offline">offline<\/span>/)
 })
 
 test('nodes page links every node to its devices', () => {
-  const html = nodesPage({ ...view, nodes: [{ name: 'home', n: 2, publicKey: 'key' }, { name: 'work', n: 3, publicKey: 'key' }] })
+  const html = nodesPage({ ...view, nodes: [{ name: 'home', n: 2, port: 51822, publicKey: 'key' }, { name: 'work', n: 3, port: 51823, publicKey: 'key' }] })
   assert.match(html, /<td class="mono">51822<\/td>\n<td class="action"><a class="btn ghost" href="\/nodes\/2">Devices<\/a><form /)
   assert.match(html, /<a class="btn ghost" href="\/nodes\/3">Devices<\/a>/)
 })
 
 test('nodes page has a remove button on every node, asking first', () => {
-  const html = nodesPage({ ...view, nodes: [{ name: 'home', n: 2, publicKey: 'key' }, { name: 'work', n: 3, publicKey: 'key' }] })
+  const html = nodesPage({ ...view, nodes: [{ name: 'home', n: 2, port: 51822, publicKey: 'key' }, { name: 'work', n: 3, port: 51823, publicKey: 'key' }] })
   assert.match(html, /Devices<\/a><form method="post" action="\/nodes\/2\/remove" data-confirm="Remove home\? It stops working until you add it and run its new join command, and its devices need their QR codes scanned again\." onsubmit="return confirm\(this\.dataset\.confirm\)"><button class="btn ghost">Remove<\/button><\/form><\/td>\n<\/tr>/)
   assert.match(html, /action="\/nodes\/3\/remove" data-confirm="Remove work\?/)
 })
 
 test('nodes page escapes the node name in the remove question', () => {
-  assert.match(nodesPage({ ...view, nodes: [{ name: `"><b>&'`, n: 2, publicKey: 'key' }] }), /data-confirm="Remove &#34;&#62;&#60;b&#62;&#38;&#39;\? /)
+  assert.match(nodesPage({ ...view, nodes: [{ name: `"><b>&'`, n: 2, port: 51822, publicKey: 'key' }] }), /data-confirm="Remove &#34;&#62;&#60;b&#62;&#38;&#39;\? /)
 })
 
 test('nodes page escapes node names', () => {
-  const html = nodesPage({ ...view, nodes: [{ name: `<script>"&'</script>`, n: 1, publicKey: 'key' }] })
+  const html = nodesPage({ ...view, nodes: [{ name: `<script>"&'</script>`, n: 1, port: 51821, publicKey: 'key' }] })
   assert.match(html, /<b>&#60;script&#62;&#34;&#38;&#39;&#60;\/script&#62;<\/b>/)
   assert.doesNotMatch(html, /<script>/)
 })
@@ -96,7 +96,7 @@ test('nodes page fills the form with the name given, escaped', () => {
 })
 
 test('nodes page shows the pinned join command under a node waiting to join', () => {
-  const nodes = [{ name: 'home', n: 2, publicKey: 'key' }, { name: 'work', n: 3, publicKey: 'key' }]
+  const nodes = [{ name: 'home', n: 2, port: 51822, publicKey: 'key' }, { name: 'work', n: 3, port: 51823, publicKey: 'key' }]
   const joins = [{ token: 'abc', n: 2, privateKey: 'key', expires: Date.now() + 60_000 }]
   const html = nodesPage({ ...view, nodes, joins, pin: 'pin=' })
   assert.match(html, /<td class="mono">51822<\/td>\n<td class="action">.*<\/td>\n<\/tr>\n<tr class="join"><td colspan="5"><code class="mono">curl -fsSk --pinnedpubkey sha256\/\/pin= https:\/\/hub:8443\/join\/abc \| sudo sh<\/code><\/td><\/tr>/)
@@ -105,16 +105,16 @@ test('nodes page shows the pinned join command under a node waiting to join', ()
 
 test('nodes page hides an expired join', () => {
   const joins = [{ token: 'abc', n: 2, privateKey: 'key', expires: Date.now() - 1 }]
-  assert.doesNotMatch(nodesPage({ ...view, nodes: [{ name: 'home', n: 2, publicKey: 'key' }], joins }), /class="join"/)
+  assert.doesNotMatch(nodesPage({ ...view, nodes: [{ name: 'home', n: 2, port: 51822, publicKey: 'key' }], joins }), /class="join"/)
 })
 
 test('nodes page escapes the host in the join command', () => {
   const joins = [{ token: 'abc', n: 2, privateKey: 'key', expires: Date.now() + 60_000 }]
-  const html = nodesPage({ ...view, nodes: [{ name: 'home', n: 2, publicKey: 'key' }], joins, host: '"><b>' })
+  const html = nodesPage({ ...view, nodes: [{ name: 'home', n: 2, port: 51822, publicKey: 'key' }], joins, host: '"><b>' })
   assert.match(html, /https:\/\/&#34;&#62;&#60;b&#62;\/join\/abc/)
 })
 
-const node = { name: 'home', n: 2, publicKey: 'key' }
+const node = { name: 'home', n: 2, port: 51822, publicKey: 'key' }
 
 test('node page lists each device with its address and a link to its QR code', () => {
   const html = nodePage({ node, devices: [{ name: 'mum', x: 2 }, { name: 'dad', x: 3 }] })

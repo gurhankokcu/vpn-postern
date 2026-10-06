@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-export type Node = { name: string; n: number; publicKey: string }
+export type Node = { name: string; n: number; port: number; publicKey: string }
 export type Join = { token: string; n: number; privateKey: string; expires: number }
 export type Data = { password: string; nodes: Node[]; joins: Join[] }
 
@@ -29,6 +29,6 @@ export function address(node: Pick<Node, 'n'>) {
   return `10.99.0.${node.n}`
 }
 
-export function port(node: Pick<Node, 'n'>) {
+export function listenPort(node: Pick<Node, 'n'>) {
   return 51820 + node.n
 }

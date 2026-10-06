@@ -1,4 +1,4 @@
-import { address, live, port, type Join, type Node } from './data.ts'
+import { address, live, type Join, type Node } from './data.ts'
 import type { Device } from './devices.ts'
 
 const onlineMs = 3 * 60 * 1000
@@ -63,7 +63,7 @@ export function nodesPage({ nodes, joins, handshakes, host, pin, message = '', n
 <td><b>${escapeHtml(node.name)}</b></td>
 <td><span class="pill ${status}">${status}</span></td>
 <td class="mono">${address(node)}</td>
-<td class="mono">${port(node)}</td>
+<td class="mono">${node.port}</td>
 <td class="action"><a class="btn ghost" href="/nodes/${node.n}">Devices</a><form method="post" action="/nodes/${node.n}/remove" data-confirm="Remove ${escapeHtml(node.name)}? It stops working until you add it and run its new join command, and its devices need their QR codes scanned again." onsubmit="return confirm(this.dataset.confirm)"><button class="btn ghost">Remove</button></form></td>
 </tr>`
     const join = waiting.get(node.n)

@@ -1,25 +1,51 @@
 import { randomBytes } from 'node:crypto'
-import { live, load, save } from './data.ts'
+import { listenPort, live, load, save, type Node } from './data.ts'
 import { rebuild } from './nft.ts'
 import { forget } from './ssh.ts'
 import { addPeer, keypair, removePeer } from './wg.ts'
 
 const joinMs = 60 * 60 * 1000
 
-export function addNode(name: string) {
+// The hub's own tunnel listens on 51820.
+export function portProblem(nodes: Node[], port: number) {
+  if (!Number.isInteger(port) || port < 1 || port > 65535 || port === 51820) {
+    return 'port-invalid'
+  }
+  return nodes.some((node) => node.port === port) ? 'port-taken' : null
+}
+
+function defaultPort(nodes: Node[], n: number) {
+  let port = listenPort({ n })
+  while (nodes.some((node) => node.port === port)) {
+    port++
+  }
+  return port
+}
+
+function nextN(nodes: Node[]) {
+  let n = 2
+  while (nodes.some((node) => node.n === n)) {
+    n++
+  }
+  return n
+}
+
+export function addNode(name: string, chosen?: number) {
   const data = load()
   if (data.nodes.some((node) => node.name.toLowerCase() === name.toLowerCase())) {
     return 'taken'
   }
-  let n = 2
-  while (data.nodes.some((node) => node.n === n)) {
-    n++
-  }
+  const n = nextN(data.nodes)
   if (n > 254) {
     return 'full'
   }
+  const port = chosen ?? defaultPort(data.nodes, n)
+  const problem = portProblem(data.nodes, port)
+  if (problem) {
+    return problem
+  }
   const { privateKey, publicKey } = keypair()
-  const node = { name, n, publicKey }
+  const node = { name, n, port, publicKey }
   const join = { token: randomBytes(32).toString('hex'), n, privateKey, expires: Date.now() + joinMs }
   addPeer(node)
   save({ ...data, nodes: [...data.nodes, node], joins: [...live(data.joins), join] })

@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { port, type Node } from './data.ts'
+import type { Node } from './data.ts'
 import { ssh } from './ssh.ts'
 import { keypair, publicKey } from './wg.ts'
 
@@ -129,7 +129,7 @@ async function add(node: Node, name: string, host: string) {
   }
   const serverKey = publicKey(conf.match(/^PrivateKey = (.+)$/m)?.[1] ?? '')
   const keys = keypair()
-  const client = clientConf(keys.privateKey, x, serverKey, `${host}:${port(node)}`)
+  const client = clientConf(keys.privateKey, x, serverKey, `${host}:${node.port}`)
   const write = await ssh(node, 'sh', addScript(name, conf + peer(name, keys.publicKey, x), client))
   return write.code === 0 ? 'added' : 'offline'
 }

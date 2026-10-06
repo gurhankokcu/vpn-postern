@@ -1,14 +1,14 @@
 import { execFileSync } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { address, dir, load, port, type Node } from './data.ts'
+import { address, dir, listenPort, load, type Node } from './data.ts'
 
 const file = join(dir, 'postern.nft')
 
 // Declaring the table first lets the delete succeed when it does not exist yet;
 // nft applies the file as one transaction, so forwards never drop in between.
 export function ruleset(nodes: Node[]) {
-  const forwards = nodes.map((node) => `    udp dport ${port(node)} dnat ip to ${address(node)}:${port(node)}\n`).join('')
+  const forwards = nodes.map((node) => `    udp dport ${node.port} dnat ip to ${address(node)}:${listenPort(node)}\n`).join('')
   return `table inet postern
 delete table inet postern
 table inet postern {
