@@ -1,18 +1,16 @@
 import assert from 'node:assert/strict'
 import { before, test } from 'node:test'
-import { login, output, page, post, sh } from './sim.ts'
+import { node, output, page, post, setPasswordAndLogin, sh } from './sim.ts'
 
 const password = 'add node e2e'
 let cookie = ''
 
 before(async () => {
-  assert.equal((await sh('hub', `printf '%s\\n' '${password}' | postern set-password`)).code, 0)
-  cookie = (await login(password)).cookie
+  cookie = await setPasswordAndLogin(password)
 })
 
 async function publicKey(name: string) {
-  const { nodes } = JSON.parse(await output('hub', 'cat /var/lib/postern/data.json'))
-  return nodes.find((node: { name: string }) => node.name === name).publicKey
+  return (await node(name)).publicKey
 }
 
 function peers() {

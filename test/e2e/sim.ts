@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 
 export type Result = { code: number; out: string }
@@ -50,6 +51,19 @@ export async function login(password: string) {
     status: Number(out.match(/^HTTP\/1\.1 (\d+)/)?.[1] ?? 0),
     cookie: out.match(/^set-cookie: (session=[^;]+)/im)?.[1] ?? '',
   }
+}
+
+export async function setPasswordAndLogin(password: string) {
+  assert.equal((await sh('hub', `printf '%s\\n' '${password}' | postern set-password`)).code, 0)
+  return (await login(password)).cookie
+}
+
+export async function data() {
+  return JSON.parse(await output('hub', 'cat /var/lib/postern/data.json'))
+}
+
+export async function node(name: string) {
+  return (await data()).nodes.find((node: { name: string }) => node.name === name)
 }
 
 export function page(path: string, cookie = '') {

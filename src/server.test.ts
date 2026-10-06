@@ -73,7 +73,7 @@ test('a query string does not change the route', async () => {
   assert.match(await res.text(), /action="\/login"/)
 })
 
-test('the right password signs in and goes home', async () => {
+test('the right password logs in and goes home', async () => {
   const res = await login(`password=${password}`)
   assert.equal(res.status, 303)
   assert.equal(res.headers.get('location'), '/')
@@ -108,7 +108,7 @@ test('five wrong passwords lock the login, even for the right one', async () => 
   assert.match(await res.text(), /Too many attempts\. Try again later\./)
 })
 
-test('signing in forgets earlier wrong passwords', async () => {
+test('logging in forgets earlier wrong passwords', async () => {
   for (let i = 0; i < 4; i++) {
     await login('password=wrong-password')
   }
@@ -129,7 +129,7 @@ test('a body over 4096 bytes drops the connection', async (t) => {
   assert.equal(error.mock.callCount(), 1)
 })
 
-test('home lists the nodes to a signed-in admin', async () => {
+test('home lists the nodes to a logged-in admin', async () => {
   const res = await request('/', { headers: { cookie: await session() } })
   assert.equal(res.status, 200)
   assert.match(await res.text(), /<b>home<\/b>/)
@@ -408,7 +408,7 @@ test('logging out clears the session and goes to login', async () => {
   assert.match(res.headers.get('set-cookie')!, /^session=; Max-Age=0;/)
 })
 
-test('an unknown page is not found for a signed-in admin', async () => {
+test('an unknown page is not found for a logged-in admin', async () => {
   const cookie = await session()
   for (const [method, path] of [['GET', '/missing'], ['GET', '/logout'], ['POST', '/']]) {
     const res = await request(path, { method, headers: { cookie } })

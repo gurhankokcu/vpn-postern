@@ -49,7 +49,7 @@ test('the password without its spaces is refused', async () => {
   assert.equal((await login('open sesame twice')).status, 401)
 })
 
-test('the password, spaces and all, signs in and shows the nodes', async () => {
+test('the password, spaces and all, logs in and shows the nodes', async () => {
   const { status, cookie } = await login(password)
   assert.equal(status, 303)
   assert.match(await page('/', cookie), /No nodes yet/)

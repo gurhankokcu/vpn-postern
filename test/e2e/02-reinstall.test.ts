@@ -134,7 +134,7 @@ test('a reset erases the data', async () => {
   assert.equal(await output('hub', 'systemctl is-active postern wg-quick@postern0'), 'active\nactive')
 })
 
-test('after a reset the old password is refused and the new one signs in', async () => {
+test('after a reset the old password is refused and the new one logs in', async () => {
   assert.equal((await login(password)).status, 401)
   assert.equal((await login(fresh)).status, 303)
 })

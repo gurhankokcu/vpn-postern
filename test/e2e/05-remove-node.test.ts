@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { before, test } from 'node:test'
-import { login, output, page, post, sh } from './sim.ts'
+import { node, output, page, post, setPasswordAndLogin, sh } from './sim.ts'
 
 const password = 'remove node e2e'
 let cookie = ''
@@ -10,14 +10,8 @@ let publicKey = ''
 let serverKey = ''
 
 before(async () => {
-  assert.equal((await sh('hub', `printf '%s\\n' '${password}' | postern set-password`)).code, 0)
-  cookie = (await login(password)).cookie
+  cookie = await setPasswordAndLogin(password)
 })
-
-async function node(name = 'work-pi') {
-  const data = JSON.parse(await output('hub', 'cat /var/lib/postern/data.json'))
-  return data.nodes.find((node: { name: string }) => node.name === name)
-}
 
 async function row() {
   return (await page('/', cookie)).match(/<td><b>work-pi<\/b><\/td>[\s\S]*?<\/tr>(\n<tr class="join">.*<\/tr>)?/)?.[0] ?? ''
@@ -25,7 +19,7 @@ async function row() {
 
 async function add() {
   assert.equal(await post('/nodes', cookie, 'nodeName=work-pi'), 303)
-  ;({ n, publicKey } = await node())
+  ;({ n, publicKey } = await node('work-pi'))
   command = (await row()).match(/<code class="mono">(curl [^<]+)<\/code>/)?.[1] ?? ''
   assert.match(command, /^curl -fsSk --pinnedpubkey sha256\/\/\S+ https:\/\/hub:8443\/join\/[0-9a-f]{64} \| sudo sh$/)
 }
@@ -43,7 +37,7 @@ async function wg0() {
 
 async function remove() {
   assert.equal(await post(`/nodes/${n}/remove`, cookie, ''), 303)
-  assert.equal(await node(), undefined)
+  assert.equal(await node('work-pi'), undefined)
   assert.equal(await row(), '')
   for (const peers of [await output('hub', 'wg show postern0 peers'), await output('hub', 'cat /etc/wireguard/postern0.conf')]) {
     assert.ok(!peers.includes(publicKey))

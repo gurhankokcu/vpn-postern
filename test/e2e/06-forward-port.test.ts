@@ -1,19 +1,13 @@
 import assert from 'node:assert/strict'
 import { before, test } from 'node:test'
-import { login, output, post, restart, sh } from './sim.ts'
+import { node, output, post, restart, setPasswordAndLogin, sh } from './sim.ts'
 
-const password = 'forward node e2e'
+const password = 'forward port e2e'
 let cookie = ''
 
 before(async () => {
-  assert.equal((await sh('hub', `printf '%s\\n' '${password}' | postern set-password`)).code, 0)
-  cookie = (await login(password)).cookie
+  cookie = await setPasswordAndLogin(password)
 })
-
-async function node(name: string) {
-  const data = JSON.parse(await output('hub', 'cat /var/lib/postern/data.json'))
-  return data.nodes.find((node: { name: string }) => node.name === name)
-}
 
 // The machine listens on port, while the tablet sends to the hub's port, a few times a second.
 // wg0 holds the port, so it steps aside while the machine listens.

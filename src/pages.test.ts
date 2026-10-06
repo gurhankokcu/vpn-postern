@@ -172,7 +172,7 @@ test('device page says when the node is offline, with no download', () => {
   assert.doesNotMatch(html, /class="qr"|download/)
 })
 
-test('signed-in pages have a log out button', () => {
+test('logged-in pages have a log out button', () => {
   for (const html of [nodesPage(view), nodePage({ node, devices: [] }), devicePage({ node, name: 'mum', svg: null }), notFoundPage()]) {
     assert.match(html, /<form method="post" action="\/logout"><button class="btn ghost">Log out<\/button><\/form>/)
   }

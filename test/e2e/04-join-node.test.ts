@@ -1,22 +1,17 @@
 import assert from 'node:assert/strict'
 import { before, test } from 'node:test'
-import { login, output, page, post, restart, sh } from './sim.ts'
+import { data, node, output, page, post, restart, setPasswordAndLogin, sh } from './sim.ts'
 
 const password = 'join node e2e'
 let cookie = ''
 let command = ''
 
 before(async () => {
-  assert.equal((await sh('hub', `printf '%s\\n' '${password}' | postern set-password`)).code, 0)
-  cookie = (await login(password)).cookie
+  cookie = await setPasswordAndLogin(password)
 })
 
-async function data() {
-  return JSON.parse(await output('hub', 'cat /var/lib/postern/data.json'))
-}
-
 async function address() {
-  return `10.99.0.${(await node()).n}`
+  return `10.99.0.${(await node('home-pi')).n}`
 }
 
 function token() {
@@ -26,10 +21,6 @@ function token() {
 function fetchOnly(pin?: string) {
   const curl = command.split(' | ')[0]
   return pin ? curl.replace(/sha256\/\/\S+/, `sha256//${pin}`) : curl
-}
-
-async function node() {
-  return (await data()).nodes.find((node: { name: string }) => node.name === 'home-pi')
 }
 
 async function status() {
@@ -81,7 +72,7 @@ test('home-pi starts postern0, ssh and wg0 on every boot', async () => {
 })
 
 test('home-pi runs wg0 on its port, forwarding and masquerading its users out of anything but wg0 and postern0', async () => {
-  assert.equal(await output('home-pi', 'wg show wg0 listen-port'), String(51820 + (await node()).n))
+  assert.equal(await output('home-pi', 'wg show wg0 listen-port'), String(51820 + (await node('home-pi')).n))
   assert.match(await output('home-pi', 'ip -o -4 addr show wg0'), /inet 10\.66\.66\.1\/24 /)
   assert.equal(await output('home-pi', 'ip -o link show wg0 | grep -o "mtu [0-9]*"'), 'mtu 1340')
   assert.equal(await output('home-pi', 'sysctl -n net.ipv4.ip_forward'), '1')
@@ -101,7 +92,7 @@ test('after a reboot home-pi brings postern0 and wg0 back by itself', async () =
     'systemctl is-active wg-quick@postern0 wg-quick@wg0',
   ].join('; '))
   assert.equal(active, 'active\nactive')
-  assert.equal(await output('home-pi', 'wg show wg0 listen-port'), String(51820 + (await node()).n))
+  assert.equal(await output('home-pi', 'wg show wg0 listen-port'), String(51820 + (await node('home-pi')).n))
   assert.equal(await output('home-pi', 'sysctl -n net.ipv4.ip_forward'), '1')
   assert.match(await output('home-pi', 'nft list table inet postern'), /ip saddr 10\.66\.66\.0\/24 oifname != \{ "wg0", "postern0" \} masquerade/)
   assert.equal((await sh('hub', `ping -c 3 -W 5 ${await address()}`)).code, 0)

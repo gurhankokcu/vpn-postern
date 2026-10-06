@@ -1,20 +1,14 @@
 import assert from 'node:assert/strict'
 import { before, test } from 'node:test'
-import { login, output, page, post, sh } from './sim.ts'
+import { node, output, page, post, setPasswordAndLogin, sh } from './sim.ts'
 
 const password = 'add device e2e'
 let cookie = ''
 let conf = ''
 
 before(async () => {
-  assert.equal((await sh('hub', `printf '%s\\n' '${password}' | postern set-password`)).code, 0)
-  cookie = (await login(password)).cookie
+  cookie = await setPasswordAndLogin(password)
 })
-
-async function node(name: string) {
-  const data = JSON.parse(await output('hub', 'cat /var/lib/postern/data.json'))
-  return data.nodes.find((node: { name: string }) => node.name === name)
-}
 
 test('the tablet adds the phone to home-pi and gets its QR code', async () => {
   const { n } = await node('home-pi')
