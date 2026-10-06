@@ -1,0 +1,8 @@
+#!/bin/sh
+# Stands in for ssh off the hub: logs each call and its stdin, prints $dir/ssh.out,
+# and exits with the code in $dir/ssh.code.
+dir=${POSTERN_DIR:-.dev}
+echo "ssh $*" >> "$dir/ssh.log"
+cat >> "$dir/ssh.log"
+cat "$dir/ssh.out" 2>/dev/null
+exit "$(cat "$dir/ssh.code" 2>/dev/null || echo 0)"

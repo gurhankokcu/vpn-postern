@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { live, load, save } from './data.ts'
 import { rebuild } from './nft.ts'
+import { forget } from './ssh.ts'
 import { addPeer, keypair, removePeer } from './wg.ts'
 
 const joinMs = 60 * 60 * 1000
@@ -33,6 +34,7 @@ export function removeNode(n: number) {
     return 'missing'
   }
   removePeer(node)
+  forget(node)
   save({ ...data, nodes: data.nodes.filter((other) => other.n !== n), joins: live(data.joins).filter((join) => join.n !== n) })
   rebuild()
   return 'removed'

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, test } from 'node:test'
@@ -11,6 +11,7 @@ const { addNode, dropJoin, findJoin, removeNode } = await import('./nodes.ts')
 const { ruleset } = await import('./nft.ts')
 const log = join(process.env.POSTERN_DIR, 'wg.log')
 const table = join(process.env.POSTERN_DIR, 'nft')
+const knownHosts = join(process.env.POSTERN_DIR, 'known_hosts')
 
 beforeEach(() => {
   save({ password: 'salt:key', nodes: [], joins: [] })
@@ -138,6 +139,13 @@ test('removing a node rebuilds the forwards without it', () => {
   addNode('work')
   removeNode(2)
   assert.equal(readFileSync(table, 'utf8'), ruleset([{ name: 'work', n: 3, publicKey: 'public5' }]))
+})
+
+test('removing a node forgets its host key', () => {
+  addNode('home')
+  writeFileSync(knownHosts, '10.99.0.2 ssh-ed25519 AAAAhome\n')
+  removeNode(2)
+  assert.equal(readFileSync(knownHosts, 'utf8'), '')
 })
 
 test('a removed node frees its n and its name', () => {
