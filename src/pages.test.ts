@@ -49,12 +49,12 @@ test('the tree starts at the hub, with its address, its port and Add node', () =
   const html = treePage({ ...empty, hubPort: 443 })
   assert.match(html, /<title>Nodes · VPN Postern<\/title>/)
   assert.match(html, /<thead><tr><th>Name<\/th><th class="address">Address<\/th><th class="port">Port<\/th><th><\/th><\/tr><\/thead>/)
-  assert.match(html, /<tr class="hub">\n<td class="name"><div class="cell"><span class="label"><i class="dot online" role="img" aria-label="online"><\/i><b>Hub<\/b><\/span><\/div><\/td>\n<td class="mono address">10\.99\.0\.1<\/td>\n<td class="mono port"><span class="value">443<a class="btn ghost act" href="\/hub\/port" aria-label="Change port"><svg [\s\S]*?<\/svg><\/a><\/span><\/td>\n<td class="acts"><a class="btn ghost act" href="\/nodes\/new" aria-label="Add node"><svg /)
+  assert.match(html, /<tr class="hub">\n<td class="name"><div class="cell"><span class="label"><i class="dot online" role="img" aria-label="online"><\/i><b>Hub<\/b><\/span><\/div><\/td>\n<td class="mono address">10\.99\.0\.1<\/td>\n<td class="mono port"><span class="value">443<a class="btn ghost act" href="\/port" aria-label="Change port"><svg [\s\S]*?<\/svg><\/a><\/span><\/td>\n<td class="acts"><a class="btn ghost act" href="\/new-node" aria-label="Add node"><svg /)
 })
 
 test('with no nodes, the tree offers the first one', () => {
   const html = treePage(empty)
-  assert.match(html, /<span class="label">No nodes yet\. Add one for each home network to reach\.<\/span><a class="btn primary first" href="\/nodes\/new">Add your first node<\/a>/)
+  assert.match(html, /<span class="label">No nodes yet\. Add one for each home network to reach\.<\/span><a class="btn primary first" href="\/new-node">Add your first node<\/a>/)
   assert.doesNotMatch(treePage(both), /No nodes yet/)
 })
 
@@ -189,7 +189,7 @@ test('an offline node\'s port says it can change once it is back, with no form',
 test('changing the hub\'s port asks for it, prefilled, warning that each node drops for a moment', () => {
   const html = hubPortModal(51820, [])
   assert.match(html, /<h2 id="modal-title">Hub's port<\/h2>/)
-  assert.match(html, /<form class="form" method="post" action="\/hub\/port">/)
+  assert.match(html, /<form class="form" method="post" action="\/port">/)
   assert.match(html, /<input name="port" value="51820" inputmode="numeric" autocomplete="off" autofocus required><\/span><small>The UDP port on the hub that every node dials\.<\/small>/)
   assert.match(html, /<div class="warn">Each node drops for a few seconds while it moves to the new port\.<\/div>/)
   assert.match(html, /<button class="btn primary">Save port<\/button>/)

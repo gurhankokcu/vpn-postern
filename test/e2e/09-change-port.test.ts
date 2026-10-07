@@ -47,7 +47,7 @@ test('the tablet, with its config downloaded again, reaches home-pi\'s LAN throu
 test('a port another program on the hub holds is refused, and the hub keeps its own', async () => {
   const holder = sh('hub', `timeout 10 node -e 'require("node:dgram").createSocket("udp4").bind(7000)'`)
   await sh('hub', 'for i in $(seq 20); do ss -Hlun "sport = :7000" | grep -q . && break; sleep 0.5; done')
-  assert.equal(await post('/hub/port', cookie, 'port=7000'), 409)
+  assert.equal(await post('/port', cookie, 'port=7000'), 409)
   assert.equal(await output('hub', 'wg show postern0 listen-port'), '443')
   assert.match(await output('home-pi', 'cat /etc/wireguard/postern0.conf'), /^Endpoint = hub:443$/m)
   await holder
@@ -62,7 +62,7 @@ test('work-pi, added but not joined, changes its port without being reached', as
 })
 
 test('the hub moves to its new port, keeps it, and home-pi follows it', async () => {
-  assert.equal(await post('/hub/port', cookie, 'port=4500'), 303)
+  assert.equal(await post('/port', cookie, 'port=4500'), 303)
   assert.equal(await output('hub', 'wg show postern0 listen-port'), '4500')
   assert.match(await output('hub', 'cat /etc/wireguard/postern0.conf'), /^ListenPort = 4500$/m)
   assert.match(await output('home-pi', 'cat /etc/wireguard/postern0.conf'), /^Endpoint = hub:4500$/m)

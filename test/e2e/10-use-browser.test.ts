@@ -68,10 +68,10 @@ test('a wrong password is refused, and the right one opens the tree', async () =
 
 test('a modal opened from the tree is modal, keeps its address and focuses its Name', async () => {
   await page.click('a[aria-label="Add node"]')
-  await page.waitForURL(`${hub}/nodes/new`)
+  await page.waitForURL(`${hub}/new-node`)
   // The close event from the script's close() arrives after the page has loaded.
   await page.waitForTimeout(200)
-  assert.equal(path(), '/nodes/new')
+  assert.equal(path(), '/new-node')
   assert.equal(await page.evaluate('document.querySelector("dialog").matches(":modal")'), true)
   assert.equal(await page.evaluate('document.activeElement.name'), 'nodeName')
 })
@@ -114,7 +114,7 @@ test('a node\'s pencil opens its port modal, focused on Port, and a taken port c
 test('the hub\'s pencil opens its port modal, focused on Port, and a node\'s port comes back in it', async () => {
   await page.goto(`${hub}/`)
   await page.click('tr.hub a[aria-label="Change port"]')
-  await page.waitForURL(`${hub}/hub/port`)
+  await page.waitForURL(`${hub}/port`)
   assert.equal(await page.evaluate('document.activeElement.name'), 'port')
   const port = String((await node('home-pi')).port)
   await page.fill('input[name="port"]', port)
@@ -219,7 +219,7 @@ test('removing a node asks first, and goes only once the answer is yes', async (
 
 test('on a phone, a node with the longest name keeps its buttons inside the window', async () => {
   const name = 'The Pi in the shed at the bottom'
-  await page.goto(`${hub}/nodes/new`)
+  await page.goto(`${hub}/new-node`)
   await page.fill('input[name="nodeName"]', name)
   await page.click('dialog button:text-is("Add node")')
   await page.waitForSelector(`dialog h2:text-is("Join ${name}")`)
@@ -240,10 +240,10 @@ test('on a touch screen every field is 16px, so tapping one does not zoom the pa
   await phone.fill('input[name="password"]', password)
   await phone.click('button:text-is("Log in")')
   await phone.waitForURL(`${hub}/`)
-  await phone.goto(`${hub}/nodes/new`)
+  await phone.goto(`${hub}/new-node`)
   assert.equal(await fontSize(phone, 'input[name="nodeName"]'), '16px')
   await phone.close()
-  await page.goto(`${hub}/nodes/new`)
+  await page.goto(`${hub}/new-node`)
   assert.equal(await fontSize(page, 'input[name="nodeName"]'), '13.5px')
   await page.goto(`${hub}/`)
 })

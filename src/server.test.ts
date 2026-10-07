@@ -242,7 +242,7 @@ function add(cookie: string, body: string) {
 }
 
 test('add node opens over the tree with the next free port filled in', async () => {
-  const html = await page('/nodes/new')
+  const html = await page('/new-node')
   assert.match(html, /<b>home<\/b>/)
   assert.match(html, /<dialog open aria-labelledby="modal-title">\n<div class="card-head"><h2 id="modal-title">Add node<\/h2>/)
   assert.match(html, /<input name="port" value="51822"/)
@@ -568,7 +568,7 @@ test('a node still waiting to join changes its port without being reached', asyn
 })
 
 function changeHubPort(cookie: string, body: string) {
-  return request('/hub/port', {
+  return request('/port', {
     method: 'POST',
     headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' },
     body,
@@ -578,13 +578,13 @@ function changeHubPort(cookie: string, body: string) {
 test('the hub\'s port opens over the tree, prefilled', async () => {
   online()
   writeFileSync(join(dir, 'listen-port'), '443\n')
-  const html = await page('/hub/port')
+  const html = await page('/port')
   assert.match(html, /<h2 id="modal-title">Hub's port<\/h2>/)
   assert.match(html, /<input name="port" value="443"/)
 })
 
 test('the hub\'s port names the offline nodes it waits for', async () => {
-  assert.match(await page('/hub/port'), /home is offline\. Wait until it is back to change the hub's port, or remove it if it is gone for good\./)
+  assert.match(await page('/port'), /home is offline\. Wait until it is back to change the hub's port, or remove it if it is gone for good\./)
 })
 
 test('changing the hub\'s port moves every node and the hub, and goes back to the tree', async () => {
@@ -645,7 +645,7 @@ test('a password over 256 characters is refused', async () => {
 })
 
 test('without a session every other page goes to login', async () => {
-  for (const [method, path] of [['GET', '/'], ['GET', '/missing'], ['POST', '/logout'], ['POST', '/'], ['POST', '/nodes'], ['POST', '/nodes/1/remove'], ['GET', '/nodes/new'], ['GET', '/nodes/1/join'], ['GET', '/nodes/1/new-device'], ['POST', '/nodes/1/devices'], ['GET', '/nodes/1/devices/mum'], ['GET', '/nodes/1/devices/mum.conf'], ['POST', '/nodes/1/devices/mum/remove']]) {
+  for (const [method, path] of [['GET', '/'], ['GET', '/missing'], ['POST', '/logout'], ['POST', '/'], ['GET', '/port'], ['POST', '/port'], ['POST', '/nodes'], ['POST', '/nodes/1/remove'], ['GET', '/new-node'], ['GET', '/nodes/1/join'], ['GET', '/nodes/1/port'], ['POST', '/nodes/1/port'], ['GET', '/nodes/1/new-device'], ['POST', '/nodes/1/devices'], ['GET', '/nodes/1/devices/mum'], ['GET', '/nodes/1/devices/mum.conf'], ['POST', '/nodes/1/devices/mum/remove']]) {
     const res = await request(path, { method })
     assert.equal(res.status, 303)
     assert.equal(res.headers.get('location'), '/login')

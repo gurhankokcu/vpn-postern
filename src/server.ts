@@ -109,10 +109,10 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
   if (route === 'GET /') {
     return send(res, 200, await tree())
   }
-  if (route === 'GET /hub/port') {
+  if (route === 'GET /port') {
     return send(res, 200, await tree(hubPortModal(hubPort(), offlineNodes())))
   }
-  if (route === 'POST /hub/port') {
+  if (route === 'POST /port') {
     const params = await form(req)
     const port = field(params, 'port')
     const again = async (status: number, message: string) => send(res, status, await tree(hubPortModal(params.get('port') ?? '', [], message)))
@@ -131,7 +131,7 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     }
     return redirect(res, '/')
   }
-  if (route === 'GET /nodes/new') {
+  if (route === 'GET /new-node') {
     return send(res, 200, await tree(addNodeModal(nextPort())))
   }
   if (route === 'POST /nodes') {

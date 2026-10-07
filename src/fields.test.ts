@@ -29,6 +29,15 @@ test('a password is 12 to 256 characters on one line', () => {
   }
 })
 
+test('a port is 1 to 5 digits', () => {
+  for (const port of ['1', '80', '51820', '65535']) {
+    assert.match(port, fields.port)
+  }
+  for (const port of ['', ' 80', '80 ', '-1', '1.5', '0x50', '1e3', '٨٠', '80\n', '123456']) {
+    assert.doesNotMatch(port, fields.port)
+  }
+})
+
 test('field returns the value when it follows its rule, else null', () => {
   assert.equal(field(new URLSearchParams('password=correct-horse'), 'password'), 'correct-horse')
   assert.equal(field(new URLSearchParams('password=correct%0Ahorse'), 'password'), null)
