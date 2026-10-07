@@ -2,6 +2,30 @@
 
 Self-hosted VPN access to networks behind NAT, with zero router configuration.
 
+Manage home nodes (a Raspberry Pi, a NAS, any Linux box) behind NAT from one droplet.
+Each node becomes a WireGuard VPN server. Phones reach it through the droplet.
+
+## How it works
+
+| Term       | Meaning                                               |
+| ---------- | ----------------------------------------------------- |
+| Hub        | the droplet: web UI, management tunnel, port forwards |
+| Node       | Linux box at home, behind NAT (e.g. a Raspberry Pi)   |
+| Device     | a phone/laptop with a WireGuard config for one node   |
+| `postern0` | management tunnel, hub ↔ nodes                        |
+| `wg0`      | the node's VPN server, for devices                    |
+
+```
+phone ──▶ hub:P/udp ══ postern0 ══▶ node:L (wg0) ──▶ home LAN, internet
+          DNAT only                  decrypts
+```
+
+- Each node dials the hub on `postern0`, which keeps its NAT open, so the hub reaches it at `10.99.0.N`.
+- Each node has its own UDP port `P` on the hub. One nftables rule forwards it to the node's `wg0`; the hub never decrypts device traffic.
+- A node's devices live only in its `/etc/wireguard/wg0.conf`. The hub stores nothing about them.
+- The hub manages nodes over SSH through `postern0`. Nothing custom runs on a node.
+- The hub keeps its data in one file, `/var/lib/postern/data.json`: the admin password hash, the nodes and the join tokens.
+
 ## Try it in the simulation
 
 ```sh
