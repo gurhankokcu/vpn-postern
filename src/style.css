@@ -295,3 +295,8 @@ dialog .act { color: var(--text-dim); }
   .tree thead, .tree td.address { display: none; }
   .tree td.port { padding-inline: 12px; }
 }
+
+/* Safari on a phone zooms into any field under 16px when it is tapped. */
+@media (hover: none) and (pointer: coarse) {
+  .form .field input, .login .field input { font-size: 16px; }
+}

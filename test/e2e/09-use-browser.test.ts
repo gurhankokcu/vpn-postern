@@ -39,6 +39,10 @@ async function centre(selector: string) {
   return box.x + box.width / 2
 }
 
+function fontSize(target: Page, selector: string) {
+  return target.evaluate<string>(`getComputedStyle(document.querySelector('${selector}')).fontSize`)
+}
+
 // Clicks a row's Remove and answers the browser's question, which it returns.
 async function remove(name: string, yes: boolean) {
   const question = new Promise<string>((resolve) => {
@@ -190,6 +194,21 @@ test('on a phone, a node with the longest name keeps its buttons inside the wind
   await remove(name, true)
   await row(name).waitFor({ state: 'detached' })
   await page.setViewportSize({ width: 1280, height: 720 })
+})
+
+test('on a touch screen every field is 16px, so tapping one does not zoom the page', async () => {
+  const phone = await browser.newPage({ ignoreHTTPSErrors: true, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+  await phone.goto(`${hub}/login`)
+  assert.equal(await fontSize(phone, 'input[name="password"]'), '16px')
+  await phone.fill('input[name="password"]', password)
+  await phone.click('button:text-is("Log in")')
+  await phone.waitForURL(`${hub}/`)
+  await phone.goto(`${hub}/nodes/new`)
+  assert.equal(await fontSize(phone, 'input[name="nodeName"]'), '16px')
+  await phone.close()
+  await page.goto(`${hub}/nodes/new`)
+  assert.equal(await fontSize(page, 'input[name="nodeName"]'), '13.5px')
+  await page.goto(`${hub}/`)
 })
 
 test('logging out goes to the login page, and the tree is closed until logging in again', async () => {
