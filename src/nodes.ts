@@ -114,9 +114,11 @@ export const unstageScript = `rm -f ${postern0}.next
 `
 
 // The node applies the new port on a timer, after this call is over and the hub has moved.
+// A timer may fire up to a minute late unless told otherwise, and the ping reaches the hub
+// at once rather than at the next keepalive.
 export const switchScript = `set -eu
 mv ${postern0}.next ${postern0}
-systemd-run --quiet --on-active=3 sh -c 'wg-quick strip postern0 | wg syncconf postern0 /dev/stdin'
+systemd-run --quiet --on-active=3 --timer-property=AccuracySec=100ms sh -c 'wg-quick strip postern0 | wg syncconf postern0 /dev/stdin; ping -c 1 -W 1 10.99.0.1'
 `
 
 // A node that has joined dials the hub's port, so it must be reached to move with it.

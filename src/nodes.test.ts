@@ -303,7 +303,7 @@ test('switchScript is valid sh that puts the staged conf in place and applies it
   execFileSync('sh', ['-n'], { input: unstageScript })
   assert.equal(switchScript, `set -eu
 mv /etc/wireguard/postern0.conf.next /etc/wireguard/postern0.conf
-systemd-run --quiet --on-active=3 sh -c 'wg-quick strip postern0 | wg syncconf postern0 /dev/stdin'
+systemd-run --quiet --on-active=3 --timer-property=AccuracySec=100ms sh -c 'wg-quick strip postern0 | wg syncconf postern0 /dev/stdin; ping -c 1 -W 1 10.99.0.1'
 `)
   assert.equal(unstageScript, 'rm -f /etc/wireguard/postern0.conf.next\n')
 })

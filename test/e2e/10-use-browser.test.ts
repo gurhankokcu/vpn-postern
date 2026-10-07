@@ -99,6 +99,43 @@ test('a hover label sits above its button, inside the window', async () => {
   assert.ok(t.x >= 8 && t.x + t.width <= page.viewportSize()!.width - 8)
 })
 
+test('a node\'s pencil opens its port modal, focused on Port, and a taken port comes back in it', async () => {
+  await page.goto(`${hub}/`)
+  await row('home-pi').locator('a[aria-label="Change port"]').click()
+  await page.waitForURL(`${hub}/nodes/${n}/port`)
+  assert.equal(await page.evaluate('document.activeElement.name'), 'port')
+  const hubPort = await page.textContent('tr.hub td.port')
+  await page.fill('input[name="port"]', hubPort ?? '')
+  await page.click('dialog button:text-is("Save port")')
+  await page.waitForSelector('dialog .note:text-is("The hub or another node already uses that port.")')
+  assert.equal(await page.inputValue('input[name="port"]'), hubPort)
+})
+
+test('the hub\'s pencil opens its port modal, focused on Port, and a node\'s port comes back in it', async () => {
+  await page.goto(`${hub}/`)
+  await page.click('tr.hub a[aria-label="Change port"]')
+  await page.waitForURL(`${hub}/hub/port`)
+  assert.equal(await page.evaluate('document.activeElement.name'), 'port')
+  const port = String((await node('home-pi')).port)
+  await page.fill('input[name="port"]', port)
+  await page.click('dialog button:text-is("Save port")')
+  await page.waitForSelector('dialog .note:text-is("A node already uses that port.")')
+  assert.equal(await page.inputValue('input[name="port"]'), port)
+})
+
+test('a pencil\'s hover label sits above it, inside the window', async () => {
+  await page.goto(`${hub}/`)
+  for (const button of [page.locator('tr.hub a[aria-label="Change port"]'), row('home-pi').locator('a[aria-label="Change port"]')]) {
+    await button.hover()
+    const tip = page.locator('.tip')
+    assert.equal(await tip.textContent(), 'Change port')
+    const b = (await button.boundingBox())!
+    const t = (await tip.boundingBox())!
+    assert.ok(t.y + t.height <= b.y)
+    assert.ok(t.x >= 8 && t.x + t.width <= page.viewportSize()!.width - 8)
+  }
+})
+
 test('copy puts the config on the clipboard and says so', async () => {
   await page.goto(`${hub}/nodes/${n}/devices/laptop`)
   await page.click('[data-copy]')
