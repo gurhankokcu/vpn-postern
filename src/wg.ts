@@ -1,6 +1,8 @@
 import { execFileSync } from 'node:child_process'
 import { address, type Node } from './data.ts'
 
+const onlineMs = 3 * 60 * 1000
+
 function run(command: string, args: string[], input = '') {
   return execFileSync(command, args, { input, encoding: 'utf8' }).trim()
 }
@@ -28,6 +30,12 @@ export function handshakes() {
     const [publicKey, seconds] = line.split('\t')
     return [publicKey, Number(seconds) * 1000]
   }))
+}
+
+// A node is online when it has shaken hands with the hub in the last 3 minutes.
+export function online(nodes: Node[]) {
+  const seen = handshakes()
+  return new Set(nodes.filter((node) => Date.now() - (seen.get(node.publicKey) ?? 0) < onlineMs).map((node) => node.n))
 }
 
 export function addPeer(node: Node) {

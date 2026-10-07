@@ -34,6 +34,9 @@ after(() => {
 beforeEach(() => {
   save({ password: hash(password), nodes, joins: [] })
   clear('127.0.0.1')
+  for (const file of ['handshakes', 'listen-port', 'ssh.log', 'ssh.out', 'ssh.code', 'ssh.hang']) {
+    rmSync(join(dir, file), { force: true })
+  }
 })
 
 function request(path: string, init: RequestInit = {}) {
@@ -52,6 +55,13 @@ async function session() {
   const res = await login(new URLSearchParams({ password }).toString())
   return res.headers.get('set-cookie')!.split(';')[0]
 }
+
+test('script.js is served to anyone', async () => {
+  const res = await request('/script.js')
+  assert.equal(res.status, 200)
+  assert.equal(res.headers.get('content-type'), 'text/javascript; charset=utf-8')
+  assert.equal(await res.text(), readFileSync(join(import.meta.dirname, 'script.js'), 'utf8'))
+})
 
 test('style.css is served to anyone', async () => {
   const res = await request('/style.css')
@@ -129,34 +139,6 @@ test('a body over 4096 bytes drops the connection', async (t) => {
   assert.equal(error.mock.callCount(), 1)
 })
 
-test('home lists the nodes to a logged-in admin', async () => {
-  const res = await request('/', { headers: { cookie: await session() } })
-  assert.equal(res.status, 200)
-  assert.match(await res.text(), /<b>home<\/b>/)
-})
-
-test('home reads the nodes afresh on every request', async () => {
-  const cookie = await session()
-  save({ password: hash(password), nodes: [{ name: 'work', n: 2, port: 51822, publicKey: 'key' }], joins: [] })
-  const html = await (await request('/', { headers: { cookie } })).text()
-  assert.match(html, /<b>work<\/b>/)
-  assert.doesNotMatch(html, /<b>home<\/b>/)
-})
-
-test('home shows a node online from its latest handshake', async () => {
-  writeFileSync(join(dir, 'handshakes'), `key\t${Math.floor(Date.now() / 1000)}\n`)
-  const html = await (await request('/', { headers: { cookie: await session() } })).text()
-  rmSync(join(dir, 'handshakes'))
-  assert.match(html, /<b>home<\/b><\/td>\n<td><span class="pill online">online<\/span>/)
-})
-
-test('home shows the pinned join command with the host it was reached at', async () => {
-  save({ password: hash(password), nodes, joins: [{ token: 'abc', n: 1, privateKey: 'key', expires: Date.now() + 60_000 }] })
-  const html = await (await request('/', { headers: { cookie: await session() } })).text()
-  const pin = execFileSync('sh', ['-c', `openssl x509 -in ${join(dir, 'tls.crt')} -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | base64`], { encoding: 'utf8' }).trim()
-  assert.ok(html.includes(`curl -fsSk --pinnedpubkey sha256//${pin} https://${new URL(base).host}/join/abc | sudo sh`))
-})
-
 test('a join command needs no session and gets the script once', async () => {
   save({ password: hash(password), nodes: [...nodes, { name: 'work', n: 2, port: 443, publicKey: 'key' }], joins: [{ token: 'abc', n: 2, privateKey: 'nodeprivate', expires: Date.now() + 60_000 }] })
   const res = await request('/join/abc')
@@ -186,6 +168,71 @@ test('an unknown or expired join command is not found, with no login redirect', 
   }
 })
 
+function online() {
+  writeFileSync(join(dir, 'handshakes'), `key\t${Math.floor(Date.now() / 1000)}\n`)
+}
+
+async function page(path: string) {
+  return (await request(path, { headers: { cookie: await session() } })).text()
+}
+
+test('the tree lists the nodes to a logged-in admin', async () => {
+  const res = await request('/', { headers: { cookie: await session() } })
+  assert.equal(res.status, 200)
+  assert.match(await res.text(), /<b>home<\/b>/)
+})
+
+test('the tree reads the nodes afresh on every request', async () => {
+  const cookie = await session()
+  save({ password: hash(password), nodes: [{ name: 'work', n: 2, port: 51822, publicKey: 'key' }], joins: [] })
+  const html = await (await request('/', { headers: { cookie } })).text()
+  assert.match(html, /<b>work<\/b>/)
+  assert.doesNotMatch(html, /<b>home<\/b>/)
+})
+
+test('the tree shows the port postern0 listens on as the hub\'s', async () => {
+  writeFileSync(join(dir, 'listen-port'), '443\n')
+  assert.match(await page('/'), /<td class="mono address">10\.99\.0\.1<\/td>\n<td class="mono port">443<\/td>/)
+})
+
+test('an offline node is not asked for its devices', async () => {
+  answer(wg0)
+  const html = await page('/')
+  assert.match(html, /<i class="dot offline" role="img" aria-label="offline"><\/i><b>home<\/b>/)
+  assert.match(html, /Offline\. Its devices show here once it is back\./)
+  assert.equal(existsSync(join(dir, 'ssh.log')), false)
+})
+
+test('an online node is asked for its devices, waiting 3 seconds at most', async () => {
+  online()
+  answer(wg0)
+  const html = await page('/')
+  assert.match(html, /<i class="dot online" role="img" aria-label="online"><\/i><b>home<\/b>/)
+  assert.match(html, /<b>mum<\/b><\/span><\/div><\/td>\n<td class="mono address">10\.66\.66\.2<\/td>/)
+  assert.match(readFileSync(join(dir, 'ssh.log'), 'utf8'), /-o ConnectTimeout=3 root@10\.99\.0\.1 cat \/etc\/wireguard\/wg0\.conf/)
+})
+
+test('an online node that cannot be reached shows as offline', async () => {
+  online()
+  answer('', 255)
+  const html = await page('/')
+  assert.match(html, /<i class="dot offline" role="img" aria-label="offline"><\/i><b>home<\/b>/)
+  assert.match(html, /Offline\. Its devices show here once it is back\./)
+})
+
+test('online nodes that stop answering are asked all at once, and the tree shows them offline after 3 seconds', async () => {
+  const cookie = await session()
+  save({ password: hash(password), nodes: [{ name: 'home', n: 2, port: 51822, publicKey: 'home' }, { name: 'work', n: 3, port: 51823, publicKey: 'work' }], joins: [] })
+  const now = Math.floor(Date.now() / 1000)
+  writeFileSync(join(dir, 'handshakes'), `home\t${now}\nwork\t${now}\n`)
+  writeFileSync(join(dir, 'ssh.hang'), '')
+  const start = Date.now()
+  const html = await (await request('/', { headers: { cookie } })).text()
+  assert.ok(Date.now() - start < 5000)
+  assert.match(html, /<i class="dot offline" role="img" aria-label="offline"><\/i><b>home<\/b>/)
+  assert.match(html, /<i class="dot offline" role="img" aria-label="offline"><\/i><b>work<\/b>/)
+})
+
 function add(cookie: string, body: string) {
   return request('/nodes', {
     method: 'POST',
@@ -194,17 +241,24 @@ function add(cookie: string, body: string) {
   })
 }
 
-test('adding a node saves it and goes home', async () => {
-  const res = await add(await session(), 'nodeName=Mum%20and%20Dad%20Pi')
+test('add node opens over the tree with the next free port filled in', async () => {
+  const html = await page('/nodes/new')
+  assert.match(html, /<b>home<\/b>/)
+  assert.match(html, /<dialog open aria-labelledby="modal-title">\n<div class="card-head"><h2 id="modal-title">Add node<\/h2>/)
+  assert.match(html, /<input name="port" value="51822"/)
+})
+
+test('adding a node saves it with its port and opens its join command', async () => {
+  const res = await add(await session(), 'nodeName=Mum%20and%20Dad%20Pi&port=443')
   assert.equal(res.status, 303)
-  assert.equal(res.headers.get('location'), '/')
-  assert.deepEqual(load().nodes.map((node) => [node.name, node.n]), [['home', 1], ['Mum and Dad Pi', 2]])
+  assert.equal(res.headers.get('location'), '/nodes/2/join')
+  assert.deepEqual(load().nodes.map((node) => [node.name, node.n, node.port]), [['home', 1, 51821], ['Mum and Dad Pi', 2, 443]])
   assert.deepEqual(load().joins.map((join) => join.n), [2])
 })
 
 test('a node name against the rule is refused with a note, adding nothing', async () => {
   const cookie = await session()
-  for (const body of ['', 'nodeName=', 'nodeName=%20work%20', `nodeName=${encodeURIComponent("Mum & Dad's <Pi>")}`]) {
+  for (const body of ['port=443', 'nodeName=&port=443', 'nodeName=%20work%20&port=443', `nodeName=${encodeURIComponent("Mum & Dad's <Pi>")}&port=443`]) {
     const res = await add(cookie, body)
     assert.equal(res.status, 400)
     assert.match(await res.text(), /<div class="note">A node name is 1 to 32 letters, digits, - or _, with single spaces between words\.<\/div>/)
@@ -212,13 +266,34 @@ test('a node name against the rule is refused with a note, adding nothing', asyn
   assert.deepEqual(load().nodes, nodes)
 })
 
-test('a refused node name stays in the form, escaped', async () => {
-  const res = await add(await session(), `nodeName=${encodeURIComponent("Mum & Dad's <Pi>")}`)
-  assert.match(await res.text(), /<input name="nodeName" value="Mum &#38; Dad&#39;s &#60;Pi&#62;"/)
+test('a refused node keeps what was typed in its form, escaped', async () => {
+  const html = await (await add(await session(), `nodeName=${encodeURIComponent("Mum & Dad's <Pi>")}&port=4%2243`)).text()
+  assert.match(html, /<input name="nodeName" value="Mum &#38; Dad&#39;s &#60;Pi&#62;"/)
+  assert.match(html, /<input name="port" value="4&#34;43"/)
+})
+
+test('a port against the rule is refused with a note, adding nothing', async () => {
+  const cookie = await session()
+  for (const body of ['nodeName=work', 'nodeName=work&port=', 'nodeName=work&port=0', 'nodeName=work&port=65536', 'nodeName=work&port=4.4', 'nodeName=work&port=x']) {
+    const res = await add(cookie, body)
+    assert.equal(res.status, 400, body)
+    assert.match(await res.text(), /<div class="note">A port is a whole number from 1 to 65535\.<\/div>/)
+  }
+  assert.deepEqual(load().nodes, nodes)
+})
+
+test('a port the hub or another node uses is refused with a note', async () => {
+  const cookie = await session()
+  for (const port of [51820, 51821]) {
+    const res = await add(cookie, `nodeName=work&port=${port}`)
+    assert.equal(res.status, 409)
+    assert.match(await res.text(), /<div class="note">The hub or another node already uses that port\.<\/div>/)
+  }
+  assert.deepEqual(load().nodes, nodes)
 })
 
 test('a node name already in use, in any case, is refused with a note, adding nothing', async () => {
-  const res = await add(await session(), 'nodeName=HOME')
+  const res = await add(await session(), 'nodeName=HOME&port=443')
   assert.equal(res.status, 409)
   const html = await res.text()
   assert.match(html, /<div class="note">Another node already has that name\.<\/div>/)
@@ -229,15 +304,30 @@ test('a node name already in use, in any case, is refused with a note, adding no
 test('a node beyond the last address is refused with a note, adding nothing', async () => {
   const full = Array.from({ length: 253 }, (_, i) => ({ name: `node${i + 2}`, n: i + 2, port: 51822 + i, publicKey: 'key' }))
   save({ password: hash(password), nodes: full, joins: [] })
-  const res = await add(await session(), 'nodeName=extra')
+  const res = await add(await session(), 'nodeName=extra&port=443')
   assert.equal(res.status, 409)
-  const html = await res.text()
-  assert.match(html, /<div class="note">All 253 node addresses are in use\.<\/div>/)
-  assert.match(html, /<input name="nodeName" value="extra"/)
+  assert.match(await res.text(), /<div class="note">All 253 node addresses are in use\.<\/div>/)
   assert.deepEqual(load().nodes, full)
 })
 
-test('removing a node drops it and goes home', async () => {
+test('the join command opens over the tree, pinned, with the host it was reached at', async () => {
+  save({ password: hash(password), nodes, joins: [{ token: 'abc', n: 1, privateKey: 'key', expires: Date.now() + 60_000 }] })
+  const html = await page('/nodes/1/join')
+  const pin = execFileSync('sh', ['-c', `openssl x509 -in ${join(dir, 'tls.crt')} -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | base64`], { encoding: 'utf8' }).trim()
+  assert.match(html, /<h2 id="modal-title">Join home<\/h2>/)
+  assert.ok(html.includes(`<pre tabindex="0">curl -fsSk --pinnedpubkey sha256//${pin} https://${new URL(base).host}/join/abc | sudo sh</pre>`))
+  assert.match(html, /Expires in 1 minute\./)
+})
+
+test('a node with no live join has no join command', async () => {
+  save({ password: hash(password), nodes, joins: [{ token: 'abc', n: 1, privateKey: 'key', expires: Date.now() - 1 }] })
+  const cookie = await session()
+  for (const path of ['/nodes/1/join', '/nodes/9/join']) {
+    assert.equal((await request(path, { headers: { cookie } })).status, 404)
+  }
+})
+
+test('removing a node drops it and goes back to the tree', async () => {
   const res = await request('/nodes/1/remove', { method: 'POST', headers: { cookie: await session() } })
   assert.equal(res.status, 303)
   assert.equal(res.headers.get('location'), '/')
@@ -278,29 +368,22 @@ function addDevice(cookie: string, body: string) {
   })
 }
 
-test('a node page lists the devices on the node', async () => {
-  answer(wg0)
-  const res = await request('/nodes/1', { headers: { cookie: await session() } })
-  assert.equal(res.status, 200)
-  const html = await res.text()
-  assert.match(html, /<h2>home<\/h2><span class="pill">1 total<\/span>/)
-  assert.match(html, /<td><b>mum<\/b><\/td>\n<td class="mono">10\.66\.66\.2<\/td>/)
+test('add device opens over the tree for its node', async () => {
+  const html = await page('/nodes/1/new-device')
+  assert.match(html, /<h2 id="modal-title">Add a device to home<\/h2>/)
+  assert.match(html, /<form class="form" method="post" action="\/nodes\/1\/devices">/)
+  assert.equal((await request('/nodes/9/new-device', { headers: { cookie: await session() } })).status, 404)
 })
 
-test('a node page says when the node is offline', async () => {
-  answer('', 255)
-  const html = await (await request('/nodes/1', { headers: { cookie: await session() } })).text()
-  assert.match(html, /<h3>home is offline<\/h3>/)
-})
-
-test('adding a device writes it to the node and shows its QR code', async () => {
+test('adding a device writes it to the node, dialing its port, and shows its QR code', async () => {
+  save({ password: hash(password), nodes: [{ ...nodes[0], port: 443 }], joins: [] })
   answer(wg0)
   const res = await addDevice(await session(), 'deviceName=tablet')
   assert.equal(res.status, 303)
   assert.equal(res.headers.get('location'), '/nodes/1/devices/tablet')
   const log = readFileSync(join(dir, 'ssh.log'), 'utf8')
   assert.match(log, /^### Client tablet\n\[Peer\]\nPublicKey = public\d+\nAllowedIPs = 10\.66\.66\.3\/32$/m)
-  assert.match(log, /^Endpoint = 127\.0\.0\.1:51821$/m)
+  assert.match(log, /^Endpoint = 127\.0\.0\.1:443$/m)
 })
 
 test('a device name against the rule is refused with a note, reaching no node', async () => {
@@ -310,7 +393,7 @@ test('a device name against the rule is refused with a note, reaching no node', 
     const res = await addDevice(cookie, body)
     assert.equal(res.status, 400)
     assert.match(await res.text(), /<div class="note">A device name is 1 to 32 letters, digits, - or _\.<\/div>/)
-    assert.doesNotMatch(readFileSync(join(dir, 'ssh.log'), 'utf8'), / sh\n/)
+    assert.equal(existsSync(join(dir, 'ssh.log')), false)
   }
 })
 
@@ -330,23 +413,23 @@ test('a device beyond the last address is refused with a note', async () => {
   assert.match(await res.text(), /<div class="note">All 253 device addresses on this node are in use\.<\/div>/)
 })
 
-test('adding a device to an offline node says the node is offline, trying it only once', async () => {
+test('adding a device to an offline node says so in its form, trying it only once', async () => {
   answer('', 255)
   const res = await addDevice(await session(), 'deviceName=tablet')
   assert.equal(res.status, 503)
   const html = await res.text()
-  assert.match(html, /<h3>home is offline<\/h3>/)
+  assert.match(html, /<div class="note">home is offline\.<\/div>/)
   assert.match(html, /<input name="deviceName" value="tablet"/)
   assert.equal(readFileSync(join(dir, 'ssh.log'), 'utf8').match(/^ssh /gm)?.length, 1)
 })
 
-test('a device page shows the device\'s QR code', async () => {
+test('a device opens over the tree with its QR code and config', async () => {
   answer('CLIENT\n')
-  const res = await request('/nodes/1/devices/mum', { headers: { cookie: await session() } })
-  assert.equal(res.status, 200)
-  const html = await res.text()
+  const html = await page('/nodes/1/devices/mum')
+  assert.match(html, /<h2 id="modal-title">mum <span class="pill">home<\/span><\/h2>/)
   assert.match(html, /<div class="qr"><svg>qr<\/svg>\n<\/div>/)
-  assert.match(html, /href="\/nodes\/1\/devices\/mum\.conf" download/)
+  assert.match(html, /<pre tabindex="0">CLIENT\n<\/pre>/)
+  assert.match(html, /href="\/nodes\/1\/devices\/mum\.conf" aria-label="Download \.conf" download/)
 })
 
 test('a device\'s .conf downloads as a file', async () => {
@@ -360,7 +443,7 @@ test('a device\'s .conf downloads as a file', async () => {
 test('a device on an offline node says so, and its .conf is unavailable', async () => {
   answer('', 255)
   const cookie = await session()
-  assert.match(await (await request('/nodes/1/devices/mum', { headers: { cookie } })).text(), /<h3>home is offline<\/h3>/)
+  assert.match(await (await request('/nodes/1/devices/mum', { headers: { cookie } })).text(), /home is offline\. Its QR code shows here once it is back\./)
   const res = await request('/nodes/1/devices/mum.conf', { headers: { cookie } })
   assert.equal(res.status, 503)
   assert.equal(await res.text(), 'home is offline.\n')
@@ -369,7 +452,7 @@ test('a device on an offline node says so, and its .conf is unavailable', async 
 test('an unknown device or node is not found', async () => {
   answer('', 1)
   const cookie = await session()
-  for (const path of ['/nodes/1/devices/missing', '/nodes/1/devices/missing.conf', '/nodes/9', '/nodes/9/devices/mum', '/nodes/1/devices/mum%20phone', '/nodes/1/devices/', '/nodes/x']) {
+  for (const path of ['/nodes/1/devices/missing', '/nodes/1/devices/missing.conf', '/nodes/9', '/nodes/1', '/nodes/9/devices/mum', '/nodes/1/devices/mum%20phone', '/nodes/1/devices/', '/nodes/x']) {
     const res = await request(path, { headers: { cookie } })
     assert.equal(res.status, 404, path)
     assert.match(await res.text(), /<h3>Not found<\/h3>/)
@@ -381,11 +464,11 @@ function removeDevice(cookie: string, name: string) {
   return request(`/nodes/1/devices/${name}/remove`, { method: 'POST', headers: { cookie } })
 }
 
-test('removing a device drops it from the node and goes back to the node', async () => {
+test('removing a device drops it from the node and goes back to the tree', async () => {
   answer(wg0)
   const res = await removeDevice(await session(), 'mum')
   assert.equal(res.status, 303)
-  assert.equal(res.headers.get('location'), '/nodes/1')
+  assert.equal(res.headers.get('location'), '/')
   const log = readFileSync(join(dir, 'ssh.log'), 'utf8')
   assert.doesNotMatch(log.split(/ sh\n/)[1], /### Client mum/)
   assert.match(log, /^rm -f \/etc\/wireguard\/clients\/mum\.conf$/m)
@@ -395,7 +478,7 @@ test('removing a device from an offline node says the node is offline, trying it
   answer('', 255)
   const res = await removeDevice(await session(), 'mum')
   assert.equal(res.status, 503)
-  assert.match(await res.text(), /<h3>home is offline<\/h3>/)
+  assert.match(await res.text(), /<main><div class="note">home is offline\.<\/div>/)
   assert.equal(readFileSync(join(dir, 'ssh.log'), 'utf8').match(/^ssh /gm)?.length, 1)
 })
 
@@ -420,7 +503,7 @@ test('a password over 256 characters is refused', async () => {
 })
 
 test('without a session every other page goes to login', async () => {
-  for (const [method, path] of [['GET', '/'], ['GET', '/missing'], ['POST', '/logout'], ['POST', '/'], ['POST', '/nodes'], ['POST', '/nodes/1/remove'], ['GET', '/nodes/1'], ['POST', '/nodes/1/devices'], ['GET', '/nodes/1/devices/mum'], ['GET', '/nodes/1/devices/mum.conf'], ['POST', '/nodes/1/devices/mum/remove']]) {
+  for (const [method, path] of [['GET', '/'], ['GET', '/missing'], ['POST', '/logout'], ['POST', '/'], ['POST', '/nodes'], ['POST', '/nodes/1/remove'], ['GET', '/nodes/new'], ['GET', '/nodes/1/join'], ['GET', '/nodes/1/new-device'], ['POST', '/nodes/1/devices'], ['GET', '/nodes/1/devices/mum'], ['GET', '/nodes/1/devices/mum.conf'], ['POST', '/nodes/1/devices/mum/remove']]) {
     const res = await request(path, { method })
     assert.equal(res.status, 303)
     assert.equal(res.headers.get('location'), '/login')

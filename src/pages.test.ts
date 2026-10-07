@@ -3,12 +3,23 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import type { NodesView } from './pages.ts'
+import type { TreeView } from './pages.ts'
 
 process.env.POSTERN_DIR = mkdtempSync(join(tmpdir(), 'postern-'))
-const { devicePage, loginPage, nodePage, nodesPage, notFoundPage } = await import('./pages.ts')
+const { addDeviceModal, addNodeModal, deviceModal, joinModal, loginPage, notFoundPage, treePage } = await import('./pages.ts')
 
-const view: NodesView = { nodes: [], joins: [], handshakes: new Map(), host: 'hub:8443', pin: 'pin' }
+const home = { name: 'home', n: 2, port: 51822, publicKey: 'home' }
+const work = { name: 'work', n: 3, port: 443, publicKey: 'work' }
+const empty: TreeView = { hubPort: 51820, nodes: [], joins: [], devices: new Map() }
+const both: TreeView = {
+  ...empty,
+  nodes: [home, work],
+  devices: new Map([[2, [{ name: 'laptop', x: 2 }, { name: 'tablet', x: 3 }]], [3, null]]),
+}
+
+function rowOf(html: string, name: string) {
+  return html.match(new RegExp(`<tr[^>]*>\\n<td class="name"><div class="cell">(?:(?!</tr>)[\\s\\S])*<b>${name}</b>(?:(?!</tr>)[\\s\\S])*</tr>`))?.[0] ?? ''
+}
 
 test('login page is a password form posting to /login', () => {
   const html = loginPage()
@@ -28,158 +39,138 @@ test('login page has no log out button', () => {
   assert.doesNotMatch(loginPage(), /\/logout/)
 })
 
-test('nodes page with no nodes says so', () => {
-  const html = nodesPage(view)
+test('every page loads the stylesheet and the script', () => {
+  for (const html of [loginPage(), treePage(empty), notFoundPage()]) {
+    assert.match(html, /<link rel="stylesheet" href="\/style\.css">\n<script src="\/script\.js" defer><\/script>/)
+  }
+})
+
+test('the tree starts at the hub, with its address, its port and Add node', () => {
+  const html = treePage({ ...empty, hubPort: 443 })
   assert.match(html, /<title>Nodes · VPN Postern<\/title>/)
-  assert.match(html, /<body>/)
-  assert.match(html, /0 total/)
-  assert.match(html, /No nodes yet/)
-  assert.doesNotMatch(html, /<table>/)
+  assert.match(html, /<thead><tr><th>Name<\/th><th class="address">Address<\/th><th class="port">Port<\/th><th><\/th><\/tr><\/thead>/)
+  assert.match(html, /<tr class="hub">\n<td class="name"><div class="cell"><span class="label"><i class="dot online" role="img" aria-label="online"><\/i><b>Hub<\/b><\/span><\/div><\/td>\n<td class="mono address">10\.99\.0\.1<\/td>\n<td class="mono port">443<\/td>\n<td class="acts"><a class="btn ghost act" href="\/nodes\/new" aria-label="Add node"><svg /)
 })
 
-test('nodes page lists each node with its status, address and port', () => {
-  const html = nodesPage({ ...view, nodes: [{ name: 'home', n: 1, port: 51821, publicKey: 'key' }, { name: 'work', n: 2, port: 51822, publicKey: 'key' }] })
-  assert.match(html, /2 total/)
-  assert.doesNotMatch(html, /No nodes yet/)
-  assert.match(html, /<th>Name<\/th><th>Status<\/th><th>Address<\/th><th>Port<\/th><th><\/th><\/tr>/)
-  assert.match(html, /<td><b>home<\/b><\/td>\n<td><span class="pill offline">offline<\/span><\/td>\n<td class="mono">10\.99\.0\.1<\/td>\n<td class="mono">51821<\/td>/)
-  assert.match(html, /<td><b>work<\/b><\/td>\n<td><span class="pill offline">offline<\/span><\/td>\n<td class="mono">10\.99\.0\.2<\/td>\n<td class="mono">51822<\/td>/)
+test('with no nodes, the tree offers the first one', () => {
+  const html = treePage(empty)
+  assert.match(html, /<span class="label">No nodes yet\. Add one for each home network to reach\.<\/span><a class="btn primary first" href="\/nodes\/new">Add your first node<\/a>/)
+  assert.doesNotMatch(treePage(both), /No nodes yet/)
 })
 
-test('nodes page shows a node online only after a handshake under 3 minutes ago', () => {
-  const nodes = [{ name: 'fresh', n: 2, port: 51822, publicKey: 'fresh' }, { name: 'stale', n: 3, port: 51823, publicKey: 'stale' }, { name: 'never', n: 4, port: 51824, publicKey: 'never' }]
-  const handshakes = new Map([['fresh', Date.now() - 179_000], ['stale', Date.now() - 181_000], ['never', 0]])
-  const html = nodesPage({ ...view, nodes, handshakes })
-  assert.match(html, /<b>fresh<\/b><\/td>\n<td><span class="pill online">online<\/span>/)
-  assert.match(html, /<b>stale<\/b><\/td>\n<td><span class="pill offline">offline<\/span>/)
-  assert.match(html, /<b>never<\/b><\/td>\n<td><span class="pill offline">offline<\/span>/)
+test('a node shows its status, address and port; an online one, its devices and Add device', () => {
+  const html = treePage(both)
+  const row = rowOf(html, 'home')
+  assert.match(row, /<i class="guide tee"><\/i><span class="label"><i class="dot online" role="img" aria-label="online"><\/i><b>home<\/b>/)
+  assert.match(row, /<td class="mono address">10\.99\.0\.2<\/td>\n<td class="mono port"><span class="unit">port <\/span>51822<\/td>/)
+  assert.match(row, /<a class="btn ghost act" href="\/nodes\/2\/new-device" aria-label="Add device">/)
+  assert.match(rowOf(html, 'laptop'), /<i class="guide pass"><\/i><i class="guide tee"><\/i><span class="label"><b>laptop<\/b><\/span><\/div><\/td>\n<td class="mono address">10\.66\.66\.2<\/td>/)
+  assert.match(rowOf(html, 'tablet'), /<i class="guide pass"><\/i><i class="guide elbow"><\/i>/)
 })
 
-test('nodes page shows a node missing from the handshakes offline', () => {
-  assert.match(nodesPage({ ...view, nodes: [{ name: 'home', n: 2, port: 51822, publicKey: 'key' }] }), /<span class="pill offline">offline<\/span>/)
+test('a device can be shown and removed, asking first', () => {
+  const row = rowOf(treePage(both), 'tablet')
+  assert.match(row, /<a class="btn ghost act" href="\/nodes\/2\/devices\/tablet" aria-label="Show">/)
+  assert.match(row, /<form method="post" action="\/nodes\/2\/devices\/tablet\/remove" data-confirm="Remove tablet\? It stops connecting until you add it again and scan its new QR code\." onsubmit="return confirm\(this\.dataset\.confirm\)"><button class="btn ghost act danger" aria-label="Remove">/)
 })
 
-test('nodes page links every node to its devices', () => {
-  const html = nodesPage({ ...view, nodes: [{ name: 'home', n: 2, port: 51822, publicKey: 'key' }, { name: 'work', n: 3, port: 51823, publicKey: 'key' }] })
-  assert.match(html, /<td class="mono">51822<\/td>\n<td class="action"><a class="btn ghost" href="\/nodes\/2">Devices<\/a><form /)
-  assert.match(html, /<a class="btn ghost" href="\/nodes\/3">Devices<\/a>/)
+test('an offline node is faint, says so, and offers no Add device', () => {
+  const html = treePage(both)
+  const row = rowOf(html, 'work')
+  assert.match(row, /^<tr class="faint">\n<td class="name"><div class="cell"><i class="guide elbow"><\/i><span class="label"><i class="dot offline" role="img" aria-label="offline"><\/i>/)
+  assert.doesNotMatch(row, /Add device/)
+  assert.match(html, /<i class="guide blank"><\/i><i class="guide elbow"><\/i><span class="label">Offline\. Its devices show here once it is back\.<\/span>/)
 })
 
-test('nodes page has a remove button on every node, asking first', () => {
-  const html = nodesPage({ ...view, nodes: [{ name: 'home', n: 2, port: 51822, publicKey: 'key' }, { name: 'work', n: 3, port: 51823, publicKey: 'key' }] })
-  assert.match(html, /Devices<\/a><form method="post" action="\/nodes\/2\/remove" data-confirm="Remove home\? It stops working until you add it and run its new join command, and its devices need their QR codes scanned again\." onsubmit="return confirm\(this\.dataset\.confirm\)"><button class="btn ghost">Remove<\/button><\/form><\/td>\n<\/tr>/)
-  assert.match(html, /action="\/nodes\/3\/remove" data-confirm="Remove work\?/)
+test('a node waiting to join offers its join command and says it is waiting', () => {
+  const html = treePage({ ...both, joins: [{ token: 'abc', n: 3, privateKey: 'key', expires: Date.now() + 60_000 }] })
+  assert.match(rowOf(html, 'work'), /<a class="btn ghost act" href="\/nodes\/3\/join" aria-label="Join command">/)
+  assert.doesNotMatch(rowOf(html, 'home'), /Join command/)
+  assert.match(html, /Waiting to join\. Its devices show here once it does\./)
 })
 
-test('nodes page escapes the node name in the remove question', () => {
-  assert.match(nodesPage({ ...view, nodes: [{ name: `"><b>&'`, n: 2, port: 51822, publicKey: 'key' }] }), /data-confirm="Remove &#34;&#62;&#60;b&#62;&#38;&#39;\? /)
+test('an online node without devices says so', () => {
+  assert.match(treePage({ ...both, devices: new Map([[2, []], [3, null]]) }), /<span class="label">No devices yet\.<\/span>/)
 })
 
-test('nodes page escapes node names', () => {
-  const html = nodesPage({ ...view, nodes: [{ name: `<script>"&'</script>`, n: 1, port: 51821, publicKey: 'key' }] })
-  assert.match(html, /<b>&#60;script&#62;&#34;&#38;&#39;&#60;\/script&#62;<\/b>/)
-  assert.doesNotMatch(html, /<script>/)
+test('removing a node asks first, naming how many devices lose their connection', () => {
+  const ask = (devices: TreeView['devices']) => rowOf(treePage({ ...both, devices }), 'home').match(/data-confirm="([^"]*)"/)?.[1]
+  assert.equal(ask(new Map([[2, [{ name: 'a', x: 2 }, { name: 'b', x: 3 }]]])), 'Remove home? It and its 2 devices lose their connection.')
+  assert.equal(ask(new Map([[2, [{ name: 'a', x: 2 }]]])), 'Remove home? It and its 1 device lose their connection.')
+  assert.equal(ask(new Map([[2, []]])), 'Remove home? It loses its connection.')
+  assert.equal(ask(new Map([[2, null]])), 'Remove home? It and its devices lose their connection.')
+  assert.match(rowOf(treePage(both), 'home'), /<form method="post" action="\/nodes\/2\/remove" data-confirm=/)
 })
 
-test('nodes page has a form to add a node by name', () => {
-  assert.match(nodesPage(view), /<form class="add" method="post" action="\/nodes">\n<span class="field"><input name="nodeName" [^>]*required><\/span>\n<button class="btn primary">Add node<\/button>/)
+test('the tree escapes node and device names', () => {
+  const evil = `<i>"&'`
+  const html = treePage({ ...both, nodes: [{ ...home, name: evil }], devices: new Map([[2, [{ name: evil, x: 2 }]]]) })
+  assert.match(html, /<b>&#60;i&#62;&#34;&#38;&#39;<\/b>/)
+  assert.match(html, /data-confirm="Remove &#60;i&#62;&#34;&#38;&#39;\? It and its 1 device/)
+  assert.doesNotMatch(html, /<i>"/)
 })
 
-test('nodes page shows a message only when given one', () => {
-  assert.doesNotMatch(nodesPage(view), /class="note"/)
-  assert.match(nodesPage({ ...view, message: 'Bad name.' }), /<main><div class="note">Bad name\.<\/div>\n<section class="card">/)
+test('the tree shows a message only when given one, and the modal after the tree', () => {
+  assert.doesNotMatch(treePage(both), /class="note"/)
+  assert.match(treePage({ ...both, message: 'home is offline.' }), /<main><div class="note">home is offline\.<\/div>\n<section class="card">/)
+  assert.match(treePage({ ...both, modal: '<dialog>m</dialog>' }), /<\/table><\/section><dialog>m<\/dialog><\/main>/)
 })
 
-test('nodes page fills the form with the name given, escaped', () => {
-  assert.doesNotMatch(nodesPage(view), /value=/)
-  assert.match(nodesPage({ ...view, message: 'Bad name.', nodeName: `"><b>&'` }), /<input name="nodeName" value="&#34;&#62;&#60;b&#62;&#38;&#39;" placeholder/)
+test('a modal opens over the page, named by its heading, closing back to the tree', () => {
+  const html = addDeviceModal(home)
+  assert.match(html, /^\n<dialog open aria-labelledby="modal-title">\n<div class="card-head"><h2 id="modal-title">Add a device to home<\/h2><a class="btn ghost act" href="\/" aria-label="Close">/)
 })
 
-test('nodes page shows the pinned join command under a node waiting to join', () => {
-  const nodes = [{ name: 'home', n: 2, port: 51822, publicKey: 'key' }, { name: 'work', n: 3, port: 51823, publicKey: 'key' }]
-  const joins = [{ token: 'abc', n: 2, privateKey: 'key', expires: Date.now() + 60_000 }]
-  const html = nodesPage({ ...view, nodes, joins, pin: 'pin=' })
-  assert.match(html, /<td class="mono">51822<\/td>\n<td class="action">.*<\/td>\n<\/tr>\n<tr class="join"><td colspan="5"><code class="mono">curl -fsSk --pinnedpubkey sha256\/\/pin= https:\/\/hub:8443\/join\/abc \| sudo sh<\/code><\/td><\/tr>/)
-  assert.equal(html.match(/class="join"/g)?.length, 1)
+test('add node asks for a name and a port, prefilled, posting to /nodes', () => {
+  const html = addNodeModal(51824)
+  assert.match(html, /<form class="form" method="post" action="\/nodes">/)
+  assert.match(html, /<input name="nodeName" value="" autocomplete="off" autofocus required>/)
+  assert.match(html, /<input name="port" value="51824" inputmode="numeric" autocomplete="off" required><\/span><small>The UDP port on the hub that this node's devices dial\.<\/small>/)
+  assert.match(html, /<a class="btn ghost" href="\/">Cancel<\/a><button class="btn primary">Add node<\/button>/)
+  assert.doesNotMatch(html, /class="note"/)
 })
 
-test('nodes page hides an expired join', () => {
-  const joins = [{ token: 'abc', n: 2, privateKey: 'key', expires: Date.now() - 1 }]
-  assert.doesNotMatch(nodesPage({ ...view, nodes: [{ name: 'home', n: 2, port: 51822, publicKey: 'key' }], joins }), /class="join"/)
+test('add node shows its message and what was typed, escaped', () => {
+  const html = addNodeModal('4"3', 'Bad name.', `"><b>`)
+  assert.match(html, /<div class="note">Bad name\.<\/div>/)
+  assert.match(html, /name="nodeName" value="&#34;&#62;&#60;b&#62;"/)
+  assert.match(html, /name="port" value="4&#34;3"/)
 })
 
-test('nodes page escapes the host in the join command', () => {
-  const joins = [{ token: 'abc', n: 2, privateKey: 'key', expires: Date.now() + 60_000 }]
-  const html = nodesPage({ ...view, nodes: [{ name: 'home', n: 2, port: 51822, publicKey: 'key' }], joins, host: '"><b>' })
-  assert.match(html, /https:\/\/&#34;&#62;&#60;b&#62;\/join\/abc/)
+test('the join command sits in a code box, with the minutes left', () => {
+  const html = joinModal(work, 'curl https://hub/join/abc | sudo sh', Date.now() + 58 * 60_000)
+  assert.match(html, /<dialog open class="wide"/)
+  assert.match(html, /<h2 id="modal-title">Join work<\/h2>/)
+  assert.match(html, /<p>Run this on work as root\. It works once, within the hour\.<\/p>/)
+  assert.match(html, /<div class="code"><pre tabindex="0">curl https:\/\/hub\/join\/abc \| sudo sh<\/pre><div class="tools"><button type="button" class="btn ghost act" aria-label="Copy" data-copy>/)
+  assert.match(html, /<small>Expires in 58 minutes\.<\/small>/)
+  assert.match(joinModal(work, 'x', Date.now() + 20_000), /Expires in 1 minute\./)
 })
 
-const node = { name: 'home', n: 2, port: 51822, publicKey: 'key' }
-
-test('node page lists each device with its address and a link to its QR code', () => {
-  const html = nodePage({ node, devices: [{ name: 'mum', x: 2 }, { name: 'dad', x: 3 }] })
-  assert.match(html, /<title>home · VPN Postern<\/title>/)
-  assert.match(html, /<a class="back" href="\/">← Nodes<\/a>/)
-  assert.match(html, /<h2>home<\/h2><span class="pill">2 total<\/span>/)
-  assert.match(html, /<th>Name<\/th><th>Address<\/th><th><\/th><\/tr>/)
-  assert.match(html, /<td><b>mum<\/b><\/td>\n<td class="mono">10\.66\.66\.2<\/td>\n<td class="action"><a class="btn ghost" href="\/nodes\/2\/devices\/mum">Show<\/a><form /)
-  assert.match(html, /<td><b>dad<\/b><\/td>\n<td class="mono">10\.66\.66\.3<\/td>/)
+test('add device asks only for a name, posting to its node', () => {
+  const html = addDeviceModal(home, 'Taken.', 'mum')
+  assert.match(html, /<form class="form" method="post" action="\/nodes\/2\/devices">\n<div class="note">Taken\.<\/div>/)
+  assert.match(html, /<input name="deviceName" value="mum" autocomplete="off" autofocus required>/)
+  assert.doesNotMatch(html, /name="port"/)
 })
 
-test('node page has a remove button on every device, asking first', () => {
-  const html = nodePage({ node, devices: [{ name: 'mum', x: 2 }, { name: 'dad', x: 3 }] })
-  assert.match(html, /Show<\/a><form method="post" action="\/nodes\/2\/devices\/mum\/remove" data-confirm="Remove mum\? It stops connecting until you add it again and scan its new QR code\." onsubmit="return confirm\(this\.dataset\.confirm\)"><button class="btn ghost">Remove<\/button><\/form><\/td>\n<\/tr>/)
-  assert.match(html, /action="\/nodes\/2\/devices\/dad\/remove" data-confirm="Remove dad\?/)
+test('a device shows its QR code beside its config, to copy or download', () => {
+  const html = deviceModal(home, 'tablet', 'Endpoint = <hub>:51822\n', '<svg>qr</svg>')
+  assert.match(html, /<dialog open class="widest"/)
+  assert.match(html, /<h2 id="modal-title">tablet <span class="pill">home<\/span><\/h2>/)
+  assert.match(html, /<p class="hint">Scan the code in the WireGuard app, or copy the config into it\.<\/p>\n<div class="qr"><svg>qr<\/svg><\/div>/)
+  assert.match(html, /<pre tabindex="0">Endpoint = &#60;hub&#62;:51822\n<\/pre>/)
+  assert.match(html, /<a class="btn ghost act" href="\/nodes\/2\/devices\/tablet\.conf" aria-label="Download \.conf" download>/)
 })
 
-test('node page with no devices says so', () => {
-  const html = nodePage({ node, devices: [] })
-  assert.match(html, /0 total/)
-  assert.match(html, /No devices yet/)
-  assert.doesNotMatch(html, /<table>/)
-})
-
-test('node page says when the node is offline', () => {
-  const html = nodePage({ node, devices: null })
-  assert.match(html, /<span class="pill offline">offline<\/span>/)
-  assert.match(html, /<h3>home is offline<\/h3>/)
-  assert.doesNotMatch(html, /<table>|No devices yet/)
-})
-
-test('node page has a form to add a device by name', () => {
-  assert.match(nodePage({ node, devices: [] }), /<form class="add" method="post" action="\/nodes\/2\/devices">\n<span class="field"><input name="deviceName" [^>]*required><\/span>\n<button class="btn primary">Add device<\/button>/)
-})
-
-test('node page shows a message and the name given, escaped, only when given', () => {
-  assert.doesNotMatch(nodePage({ node, devices: [] }), /class="note"|value=/)
-  const html = nodePage({ node, devices: [], message: 'Bad name.', deviceName: `"><b>&'` })
-  assert.match(html, /<div class="note">Bad name\.<\/div>\n<section class="card">/)
-  assert.match(html, /<input name="deviceName" value="&#34;&#62;&#60;b&#62;&#38;&#39;" placeholder/)
-})
-
-test('node page escapes the node name', () => {
-  const html = nodePage({ node: { ...node, name: '<i>' }, devices: null })
-  assert.match(html, /<h2>&#60;i&#62;<\/h2>/)
-  assert.match(html, /<h3>&#60;i&#62; is offline<\/h3>/)
-  assert.doesNotMatch(html, /<i>/)
-})
-
-test('device page shows the QR code and a download of the .conf', () => {
-  const html = devicePage({ node, name: 'mum', svg: '<svg>qr</svg>' })
-  assert.match(html, /<title>mum · VPN Postern<\/title>/)
-  assert.match(html, /<a class="back" href="\/nodes\/2">← home<\/a>/)
-  assert.match(html, /<h2>mum<\/h2><span class="pill">home<\/span>\n<a class="btn primary" href="\/nodes\/2\/devices\/mum\.conf" download>Download \.conf<\/a>/)
-  assert.match(html, /<div class="qr"><svg>qr<\/svg><\/div>/)
-})
-
-test('device page says when the node is offline, with no download', () => {
-  const html = devicePage({ node, name: 'mum', svg: null })
-  assert.match(html, /<h3>home is offline<\/h3>/)
-  assert.doesNotMatch(html, /class="qr"|download/)
+test('a device on an offline node says so, with nothing to copy', () => {
+  const html = deviceModal(home, 'tablet', null)
+  assert.match(html, /<div class="note">home is offline\. Its QR code shows here once it is back\.<\/div>/)
+  assert.doesNotMatch(html, /class="code"|class="qr"/)
 })
 
 test('logged-in pages have a log out button', () => {
-  for (const html of [nodesPage(view), nodePage({ node, devices: [] }), devicePage({ node, name: 'mum', svg: null }), notFoundPage()]) {
+  for (const html of [treePage(empty), notFoundPage()]) {
     assert.match(html, /<form method="post" action="\/logout"><button class="btn ghost">Log out<\/button><\/form>/)
   }
 })

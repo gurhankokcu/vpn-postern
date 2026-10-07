@@ -1,7 +1,5 @@
-import { address, live, type Join, type Node } from './data.ts'
+import { address, type Join, type Node } from './data.ts'
 import type { Device } from './devices.ts'
-
-const onlineMs = 3 * 60 * 1000
 
 const mark = `<svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
 <path d="M4 28V11l12-7 12 7v17" stroke="url(#g)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
@@ -14,8 +12,35 @@ const mark = `<svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
 
 const brand = `<div class="brand">${mark}<b>VPN <span>Postern</span></b></div>`
 
+// Lucide icons (https://lucide.dev), ISC licence, Copyright (c) 2026 Lucide Icons and Contributors.
+const icons = {
+  add: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+  download: '<path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/>',
+  join: '<path d="M12 19h8"/><path d="m4 17 6-6-6-6"/>',
+  remove: '<path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  show: '<rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/>',
+}
+
 function escapeHtml(text: string) {
   return text.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`)
+}
+
+function icon(name: keyof typeof icons) {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`
+}
+
+function link(href: string, label: string, name: keyof typeof icons) {
+  return `<a class="btn ghost act" href="${href}" aria-label="${label}">${icon(name)}</a>`
+}
+
+function removeButton(action: string, question: string) {
+  return `<form method="post" action="${action}" data-confirm="${escapeHtml(question)}" onsubmit="return confirm(this.dataset.confirm)"><button class="btn ghost act danger" aria-label="Remove">${icon('remove')}</button></form>`
+}
+
+function code(text: string, tools = '') {
+  return `<div class="code"><pre tabindex="0">${escapeHtml(text)}</pre><div class="tools"><button type="button" class="btn ghost act" aria-label="Copy" data-copy>${icon('copy')}</button>${tools}</div></div>`
 }
 
 function page(title: string, body: string, className = '') {
@@ -26,6 +51,7 @@ function page(title: string, body: string, className = '') {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title} · VPN Postern</title>
 <link rel="stylesheet" href="/style.css">
+<script src="/script.js" defer></script>
 </head>
 <body${className && ` class="${className}"`}>
 ${body}
@@ -53,88 +79,132 @@ ${message && `<div class="note">${message}</div>`}
 </main>`, 'login')
 }
 
-export type NodesView = { nodes: Node[]; joins: Join[]; handshakes: Map<string, number>; host: string; pin: string; message?: string; nodeName?: string }
+export type TreeView = {
+  hubPort: number
+  nodes: Node[]
+  joins: Join[]
+  devices: Map<number, Device[] | null>
+  message?: string
+  modal?: string
+}
 
-export function nodesPage({ nodes, joins, handshakes, host, pin, message = '', nodeName = '' }: NodesView) {
-  const waiting = new Map(live(joins).map((join) => [join.n, join]))
-  const rows = nodes.map((node) => {
-    const status = Date.now() - (handshakes.get(node.publicKey) ?? 0) < onlineMs ? 'online' : 'offline'
-    const row = `<tr>
-<td><b>${escapeHtml(node.name)}</b></td>
-<td><span class="pill ${status}">${status}</span></td>
-<td class="mono">${address(node)}</td>
-<td class="mono">${node.port}</td>
-<td class="action"><a class="btn ghost" href="/nodes/${node.n}">Devices</a><form method="post" action="/nodes/${node.n}/remove" data-confirm="Remove ${escapeHtml(node.name)}? It stops working until you add it and run its new join command, and its devices need their QR codes scanned again." onsubmit="return confirm(this.dataset.confirm)"><button class="btn ghost">Remove</button></form></td>
+// Each row draws its own share of the tree's lines: a pass for every ancestor with more
+// children below, then a tee, or an elbow for the last child.
+function guides(trail: string[]) {
+  return trail.map((kind) => `<i class="guide ${kind}"></i>`).join('')
+}
+
+function dot(status: string) {
+  return `<i class="dot ${status}" role="img" aria-label="${status}"></i>`
+}
+
+function row(className: string, trail: string[], label: string, address = '', port = '', acts = '') {
+  return `<tr${className && ` class="${className}"`}>
+<td class="name"><div class="cell">${guides(trail)}<span class="label">${label}</span></div></td>
+<td class="mono address">${address}</td>
+<td class="mono port">${port}</td>
+<td class="acts">${acts}</td>
 </tr>`
-    const join = waiting.get(node.n)
-    return join ? `${row}
-<tr class="join"><td colspan="5"><code class="mono">curl -fsSk --pinnedpubkey sha256//${pin} https://${escapeHtml(host)}/join/${join.token} | sudo sh</code></td></tr>` : row
-  }).join('')
-
-  const body = nodes.length
-    ? `<table><thead><tr><th>Name</th><th>Status</th><th>Address</th><th>Port</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
-    : `<div class="empty"><h3>No nodes yet</h3><p>Add a node to give it a tunnel to this hub.</p></div>`
-
-  return layout('Nodes', `${message && `<div class="note">${message}</div>\n`}<section class="card">
-<div class="card-head">
-<h2>Nodes</h2><span class="pill">${nodes.length} total</span>
-<form class="add" method="post" action="/nodes">
-<span class="field"><input name="nodeName"${nodeName && ` value="${escapeHtml(nodeName)}"`} placeholder="Node name" aria-label="Node name" required></span>
-<button class="btn primary">Add node</button>
-</form>
-</div>
-${body}
-</section>`)
 }
 
-export type NodeView = { node: Node; devices: Device[] | null; message?: string; deviceName?: string }
-
-export function nodePage({ node, devices, message = '', deviceName = '' }: NodeView) {
-  const name = escapeHtml(node.name)
-  const rows = (devices ?? []).map((device) => `<tr>
-<td><b>${escapeHtml(device.name)}</b></td>
-<td class="mono">10.66.66.${device.x}</td>
-<td class="action"><a class="btn ghost" href="/nodes/${node.n}/devices/${encodeURIComponent(device.name)}">Show</a><form method="post" action="/nodes/${node.n}/devices/${encodeURIComponent(device.name)}/remove" data-confirm="Remove ${escapeHtml(device.name)}? It stops connecting until you add it again and scan its new QR code." onsubmit="return confirm(this.dataset.confirm)"><button class="btn ghost">Remove</button></form></td>
-</tr>`).join('')
-
-  const body = devices === null
-    ? `<div class="empty"><h3>${name} is offline</h3><p>Its devices show here once it is back.</p></div>`
-    : devices.length
-      ? `<table><thead><tr><th>Name</th><th>Address</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
-      : `<div class="empty"><h3>No devices yet</h3><p>Add a device to get its QR code.</p></div>`
-
-  return layout(name, `<a class="back" href="/">← Nodes</a>
-${message && `<div class="note">${message}</div>\n`}<section class="card">
-<div class="card-head">
-<h2>${name}</h2>${devices === null ? '<span class="pill offline">offline</span>' : `<span class="pill">${devices.length} total</span>`}
-<form class="add" method="post" action="/nodes/${node.n}/devices">
-<span class="field"><input name="deviceName"${deviceName && ` value="${escapeHtml(deviceName)}"`} placeholder="Device name" aria-label="Device name" required></span>
-<button class="btn primary">Add device</button>
-</form>
-</div>
-${body}
-</section>`)
+function aside(trail: string[], text: string, extra = '') {
+  return `<tr class="aside"><td class="name" colspan="4"><div class="cell">${guides(trail)}<span class="label">${text}</span>${extra}</div></td></tr>`
 }
 
-export type DeviceView = { node: Node; name: string; svg: string | null }
+function removeNodeQuestion(node: Node, devices: Device[] | null | undefined) {
+  if (!devices) {
+    return `Remove ${node.name}? It and its devices lose their connection.`
+  }
+  if (!devices.length) {
+    return `Remove ${node.name}? It loses its connection.`
+  }
+  return `Remove ${node.name}? It and its ${devices.length} device${devices.length === 1 ? '' : 's'} lose their connection.`
+}
 
-export function devicePage({ node, name, svg }: DeviceView) {
-  const nodeName = escapeHtml(node.name)
-  const deviceName = escapeHtml(name)
-  const href = `/nodes/${node.n}/devices/${encodeURIComponent(name)}`
-  const body = svg === null
-    ? `<div class="empty"><h3>${nodeName} is offline</h3><p>The QR code shows here once it is back.</p></div>`
-    : `<div class="qr">${svg}</div>
-<p class="hint">Scan it in the WireGuard app, or import the .conf file.</p>`
+export function treePage({ hubPort, nodes, joins, devices, message = '', modal = '' }: TreeView) {
+  const waiting = new Set(joins.map((join) => join.n))
+  const rows = [row('hub', [], `${dot('online')}<b>Hub</b>`, '10.99.0.1', String(hubPort), link('/nodes/new', 'Add node', 'add'))]
+  if (!nodes.length) {
+    rows.push(aside(['elbow'], 'No nodes yet. Add one for each home network to reach.', '<a class="btn primary first" href="/nodes/new">Add your first node</a>'))
+  }
+  nodes.forEach((node, i) => {
+    const last = i === nodes.length - 1
+    const pass = last ? 'blank' : 'pass'
+    const list = devices.get(node.n)
+    const status = list ? 'online' : 'offline'
+    const acts = (waiting.has(node.n) ? link(`/nodes/${node.n}/join`, 'Join command', 'join') : '')
+      + (list ? link(`/nodes/${node.n}/new-device`, 'Add device', 'add') : '')
+      + removeButton(`/nodes/${node.n}/remove`, removeNodeQuestion(node, list))
+    rows.push(row(list ? '' : 'faint', [last ? 'elbow' : 'tee'], `${dot(status)}<b>${escapeHtml(node.name)}</b>`, address(node), `<span class="unit">port </span>${node.port}`, acts))
+    if (!list) {
+      rows.push(aside([pass, 'elbow'], waiting.has(node.n) ? 'Waiting to join. Its devices show here once it does.' : 'Offline. Its devices show here once it is back.'))
+    } else if (!list.length) {
+      rows.push(aside([pass, 'elbow'], 'No devices yet.'))
+    }
+    list?.forEach((device, j) => {
+      const href = `/nodes/${node.n}/devices/${encodeURIComponent(device.name)}`
+      const acts = link(href, 'Show', 'show') + removeButton(`${href}/remove`, `Remove ${device.name}? It stops connecting until you add it again and scan its new QR code.`)
+      rows.push(row('', [pass, j === list.length - 1 ? 'elbow' : 'tee'], `<b>${escapeHtml(device.name)}</b>`, `10.66.66.${device.x}`, '', acts))
+    })
+  })
 
-  return layout(deviceName, `<a class="back" href="/nodes/${node.n}">← ${nodeName}</a>
-<section class="card">
-<div class="card-head">
-<h2>${deviceName}</h2><span class="pill">${nodeName}</span>
-${svg === null ? '' : `<a class="btn primary" href="${href}.conf" download>Download .conf</a>`}
-</div>
+  return layout('Nodes', `${message && `<div class="note">${message}</div>\n`}<section class="card"><table class="tree">
+<thead><tr><th>Name</th><th class="address">Address</th><th class="port">Port</th><th></th></tr></thead>
+<tbody>
+${rows.join('\n')}
+</tbody>
+</table></section>${modal}`)
+}
+
+function modal(title: string, body: string, size = '') {
+  return `
+<dialog open${size && ` class="${size}"`} aria-labelledby="modal-title">
+<div class="card-head"><h2 id="modal-title">${title}</h2>${link('/', 'Close', 'close')}</div>
 ${body}
-</section>`)
+</dialog>`
+}
+
+function buttons(label: string) {
+  return `<div class="buttons"><a class="btn ghost" href="/">Cancel</a><button class="btn primary">${label}</button></div>`
+}
+
+export function addNodeModal(port: number | string, message = '', name = '') {
+  return modal('Add node', `<form class="form" method="post" action="/nodes">
+${message && `<div class="note">${message}</div>`}
+<label>Name<span class="field"><input name="nodeName" value="${escapeHtml(name)}" autocomplete="off" autofocus required></span><small>1 to 32 letters, digits, - or _, with single spaces between words.</small></label>
+<label>Port<span class="field"><input name="port" value="${escapeHtml(String(port))}" inputmode="numeric" autocomplete="off" required></span><small>The UDP port on the hub that this node's devices dial.</small></label>
+${buttons('Add node')}
+</form>`)
+}
+
+export function joinModal(node: Node, command: string, expires: number) {
+  const minutes = Math.max(1, Math.round((expires - Date.now()) / 60_000))
+  return modal(`Join ${escapeHtml(node.name)}`, `<div class="modal-body">
+<p>Run this on ${escapeHtml(node.name)} as root. It works once, within the hour.</p>
+${code(command)}
+<small>Expires in ${minutes} minute${minutes === 1 ? '' : 's'}.</small>
+</div>`, 'wide')
+}
+
+export function addDeviceModal(node: Node, message = '', name = '') {
+  return modal(`Add a device to ${escapeHtml(node.name)}`, `<form class="form" method="post" action="/nodes/${node.n}/devices">
+${message && `<div class="note">${message}</div>`}
+<label>Name<span class="field"><input name="deviceName" value="${escapeHtml(name)}" autocomplete="off" autofocus required></span><small>1 to 32 letters, digits, - or _. No spaces.</small></label>
+${buttons('Add device')}
+</form>`)
+}
+
+export function deviceModal(node: Node, name: string, conf: string | null, svg = '') {
+  const title = `${escapeHtml(name)} <span class="pill">${escapeHtml(node.name)}</span>`
+  if (conf === null) {
+    return modal(title, `<div class="modal-body"><div class="note">${escapeHtml(node.name)} is offline. Its QR code shows here once it is back.</div></div>`)
+  }
+  const download = `<a class="btn ghost act" href="/nodes/${node.n}/devices/${encodeURIComponent(name)}.conf" aria-label="Download .conf" download>${icon('download')}</a>`
+  return modal(title, `<div class="config">
+<p class="hint">Scan the code in the WireGuard app, or copy the config into it.</p>
+<div class="qr">${svg}</div>
+${code(conf, download)}
+</div>`, 'widest')
 }
 
 export function notFoundPage() {

@@ -11,7 +11,7 @@ const dir = process.env.POSTERN_DIR
 const node = { name: 'home', n: 2, port: 51822, publicKey: 'key' }
 
 beforeEach(() => {
-  for (const file of ['ssh.log', 'ssh.out', 'ssh.code', 'known_hosts']) {
+  for (const file of ['ssh.log', 'ssh.out', 'ssh.code', 'ssh.hang', 'known_hosts']) {
     rmSync(join(dir, file), { force: true })
   }
 })
@@ -31,6 +31,14 @@ test('ssh returns what the node printed and exit code 0', async () => {
 test('ssh returns the exit code when it fails', async () => {
   writeFileSync(join(dir, 'ssh.code'), '255')
   assert.equal((await ssh(node, 'hostname')).code, 255)
+})
+
+test('ssh given seconds connects within them and gives up on a node that stops answering', async () => {
+  writeFileSync(join(dir, 'ssh.hang'), '')
+  const start = Date.now()
+  assert.equal((await ssh(node, 'hostname', '', 1)).code, 255)
+  assert.ok(Date.now() - start < 5000)
+  assert.match(readFileSync(join(dir, 'ssh.log'), 'utf8'), /-o ConnectTimeout=1 root@/)
 })
 
 test('forget drops only the node\'s host keys', () => {

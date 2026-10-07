@@ -4,15 +4,16 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createServer } from 'node:https'
 import { join } from 'node:path'
 import { clear, expiredCookie, fail, locked, sessionCookie, valid, verify } from './auth.ts'
-import { dir, load, type Node } from './data.ts'
+import { dir, live, load } from './data.ts'
 import { addDevice, listDevices, qr, removeDevice, showDevice } from './devices.ts'
 import { field, fields } from './fields.ts'
 import { joinScript } from './join.ts'
-import { addNode, dropJoin, findJoin, removeNode } from './nodes.ts'
-import { devicePage, loginPage, nodePage, nodesPage, notFoundPage } from './pages.ts'
-import { handshakes, hubKey, hubPort } from './wg.ts'
+import { addNode, dropJoin, findJoin, nextPort, removeNode } from './nodes.ts'
+import { addDeviceModal, addNodeModal, deviceModal, joinModal, loginPage, notFoundPage, treePage } from './pages.ts'
+import { hubKey, hubPort, online } from './wg.ts'
 
 const css = readFileSync(join(import.meta.dirname, 'style.css'))
+const script = readFileSync(join(import.meta.dirname, 'script.js'))
 
 async function form(req: IncomingMessage) {
   let body = ''
@@ -42,17 +43,17 @@ function hostname(req: IncomingMessage) {
   return (req.headers.host ?? '').replace(/:\d+$/, '')
 }
 
-function home(req: IncomingMessage, message = '', nodeName = '') {
-  const { nodes, joins } = load()
-  return nodesPage({ nodes, joins, handshakes: handshakes(), host: req.headers.host ?? '', pin: pin(), message, nodeName })
-}
-
 function findNode(n: string | undefined) {
   return load().nodes.find((node) => node.n === Number(n))
 }
 
-async function nodeHome(node: Node, message = '', deviceName = '') {
-  return nodePage({ node, devices: await listDevices(node), message, deviceName })
+// Only nodes seen in the last 3 minutes are asked for their devices, all at once.
+async function tree(modal = '', message = '') {
+  const { nodes, joins } = load()
+  const up = online(nodes)
+  const lists = await Promise.all(nodes.map((node) => (up.has(node.n) ? listDevices(node) : null)))
+  const devices = new Map(nodes.map((node, i) => [node.n, lists[i]]))
+  return treePage({ hubPort: hubPort(), nodes, joins: live(joins), devices, message, modal })
 }
 
 async function handle(req: IncomingMessage, res: ServerResponse) {
@@ -61,6 +62,9 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
 
   if (route === 'GET /style.css') {
     return send(res, 200, css, 'text/css')
+  }
+  if (route === 'GET /script.js') {
+    return send(res, 200, script, 'text/javascript')
   }
   if (route === 'GET /login') {
     return send(res, 200, loginPage())
@@ -98,22 +102,33 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     return redirect(res, '/login', expiredCookie())
   }
   if (route === 'GET /') {
-    return send(res, 200, home(req))
+    return send(res, 200, await tree())
+  }
+  if (route === 'GET /nodes/new') {
+    return send(res, 200, await tree(addNodeModal(nextPort())))
   }
   if (route === 'POST /nodes') {
     const params = await form(req)
     const name = field(params, 'nodeName')
+    const port = field(params, 'port')
+    const again = (status: number, message: string) => tree(addNodeModal(params.get('port') ?? '', message, params.get('nodeName') ?? '')).then((html) => send(res, status, html))
     if (name === null) {
-      return send(res, 400, home(req, 'A node name is 1 to 32 letters, digits, - or _, with single spaces between words.', params.get('nodeName') ?? ''))
+      return again(400, 'A node name is 1 to 32 letters, digits, - or _, with single spaces between words.')
     }
-    const result = addNode(name)
+    const result = port === null ? 'port-invalid' : addNode(name, Number(port))
+    if (result === 'port-invalid') {
+      return again(400, 'A port is a whole number from 1 to 65535.')
+    }
+    if (result === 'port-taken') {
+      return again(409, 'The hub or another node already uses that port.')
+    }
     if (result === 'taken') {
-      return send(res, 409, home(req, 'Another node already has that name.', name))
+      return again(409, 'Another node already has that name.')
     }
     if (result === 'full') {
-      return send(res, 409, home(req, 'All 253 node addresses are in use.', name))
+      return again(409, 'All 253 node addresses are in use.')
     }
-    return redirect(res, '/')
+    return redirect(res, `/nodes/${load().nodes.find((node) => node.name === name)?.n}/join`)
   }
   const remove = route.match(/^POST \/nodes\/(\d+)\/remove$/)
   if (remove) {
@@ -122,28 +137,36 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     }
     return redirect(res, '/')
   }
-  const [, viewN] = route.match(/^GET \/nodes\/(\d+)$/) ?? []
-  const viewing = findNode(viewN)
-  if (viewing) {
-    return send(res, 200, await nodeHome(viewing))
+  const [, joinN] = route.match(/^GET \/nodes\/(\d+)\/join$/) ?? []
+  const joining = findNode(joinN)
+  const waiting = joining && live(load().joins).find((join) => join.n === joining.n)
+  if (joining && waiting) {
+    const command = `curl -fsSk --pinnedpubkey sha256//${pin()} https://${req.headers.host ?? ''}/join/${waiting.token} | sudo sh`
+    return send(res, 200, await tree(joinModal(joining, command, waiting.expires)))
+  }
+  const [, openN] = route.match(/^GET \/nodes\/(\d+)\/new-device$/) ?? []
+  const opening = findNode(openN)
+  if (opening) {
+    return send(res, 200, await tree(addDeviceModal(opening)))
   }
   const [, addN] = route.match(/^POST \/nodes\/(\d+)\/devices$/) ?? []
   const adding = findNode(addN)
   if (adding) {
     const params = await form(req)
     const name = field(params, 'deviceName')
+    const again = (status: number, message: string) => tree(addDeviceModal(adding, message, params.get('deviceName') ?? '')).then((html) => send(res, status, html))
     if (name === null) {
-      return send(res, 400, await nodeHome(adding, 'A device name is 1 to 32 letters, digits, - or _.', params.get('deviceName') ?? ''))
+      return again(400, 'A device name is 1 to 32 letters, digits, - or _.')
     }
     const result = await addDevice(adding, name, hostname(req))
     if (result === 'taken') {
-      return send(res, 409, await nodeHome(adding, 'Another device on this node already has that name.', name))
+      return again(409, 'Another device on this node already has that name.')
     }
     if (result === 'full') {
-      return send(res, 409, await nodeHome(adding, 'All 253 device addresses on this node are in use.', name))
+      return again(409, 'All 253 device addresses on this node are in use.')
     }
     if (result === 'offline') {
-      return send(res, 503, nodePage({ node: adding, devices: null, deviceName: name }))
+      return again(503, `${adding.name} is offline.`)
     }
     return redirect(res, `/nodes/${adding.n}/devices/${name}`)
   }
@@ -155,9 +178,9 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
       return send(res, 404, notFoundPage())
     }
     if (result === 'offline') {
-      return send(res, 503, nodePage({ node: removing, devices: null }))
+      return send(res, 503, await tree('', `${removing.name} is offline.`))
     }
-    return redirect(res, `/nodes/${removing.n}`)
+    return redirect(res, '/')
   }
   const [, showN, name = '', download] = route.match(/^GET \/nodes\/(\d+)\/devices\/([^/]+?)(\.conf)?$/) ?? []
   const showing = fields.deviceName.test(name) ? findNode(showN) : undefined
@@ -173,7 +196,7 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
       res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'content-disposition': `attachment; filename="${name}.conf"` })
       return res.end(conf)
     }
-    return send(res, 200, devicePage({ node: showing, name, svg: conf === 'offline' ? null : qr(conf) }))
+    return send(res, 200, await tree(conf === 'offline' ? deviceModal(showing, name, null) : deviceModal(showing, name, conf, qr(conf))))
   }
   send(res, 404, notFoundPage())
 }

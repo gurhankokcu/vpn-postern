@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { before, test } from 'node:test'
-import { node, output, page, post, setPasswordAndLogin, sh } from './sim.ts'
+import { addNode, joinCommand, node, output, post, row, setPasswordAndLogin, sh, status } from './sim.ts'
 
 const password = 'remove node e2e'
 let cookie = ''
@@ -13,14 +13,10 @@ before(async () => {
   cookie = await setPasswordAndLogin(password)
 })
 
-async function row() {
-  return (await page('/', cookie)).match(/<td><b>work-pi<\/b><\/td>[\s\S]*?<\/tr>(\n<tr class="join">.*<\/tr>)?/)?.[0] ?? ''
-}
-
 async function add() {
-  assert.equal(await post('/nodes', cookie, 'nodeName=work-pi'), 303)
+  assert.equal(await addNode(cookie, 'work-pi'), 303)
   ;({ n, publicKey } = await node('work-pi'))
-  command = (await row()).match(/<code class="mono">(curl [^<]+)<\/code>/)?.[1] ?? ''
+  command = await joinCommand(cookie, 'work-pi')
   assert.match(command, /^curl -fsSk --pinnedpubkey sha256\/\/\S+ https:\/\/hub:8443\/join\/[0-9a-f]{64} \| sudo sh$/)
 }
 
@@ -28,7 +24,7 @@ async function join() {
   const { code, out } = await sh('work-pi', command)
   assert.equal(code, 0, out)
   assert.equal((await sh('work-pi', 'ping -c 3 -W 5 10.99.0.1')).code, 0)
-  assert.match(await row(), /<span class="pill online">online<\/span>/)
+  assert.equal(await status(cookie, 'work-pi'), 'online')
 }
 
 async function wg0() {
@@ -38,7 +34,7 @@ async function wg0() {
 async function remove() {
   assert.equal(await post(`/nodes/${n}/remove`, cookie, ''), 303)
   assert.equal(await node('work-pi'), undefined)
-  assert.equal(await row(), '')
+  assert.equal(await row(cookie, 'work-pi'), '')
   for (const peers of [await output('hub', 'wg show postern0 peers'), await output('hub', 'cat /etc/wireguard/postern0.conf')]) {
     assert.ok(!peers.includes(publicKey))
   }
@@ -75,7 +71,7 @@ test('work-pi, re-added, joins again, replacing its old config', async () => {
 test('work-pi, re-added under another number, keeps its wg0 key and listens on its new port', async () => {
   const removed = n
   await remove()
-  assert.equal(await post('/nodes', cookie, 'nodeName=spare'), 303)
+  assert.equal(await addNode(cookie, 'spare'), 303)
   await add()
   assert.notEqual(n, removed)
   await join()

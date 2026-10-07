@@ -98,8 +98,9 @@ export function qr(text: string) {
   return svg.slice(svg.indexOf('<svg'))
 }
 
+// The page waits on every online node, so a node that has only just dropped gets 3 seconds.
 export async function listDevices(node: Node) {
-  const { stdout, code } = await ssh(node, `cat ${server}`)
+  const { stdout, code } = await ssh(node, `cat ${server}`, '', 3)
   return code === 0 ? devices(stdout) : null
 }
 

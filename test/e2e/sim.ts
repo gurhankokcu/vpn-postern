@@ -92,6 +92,28 @@ export function page(path: string, cookie = '') {
   return output('tablet', `${curl} -H 'cookie: ${cookie}' ${hub}${path}`)
 }
 
-export async function post(path: string, cookie: string, data: string) {
-  return Number(await output('tablet', `${curl} -o /dev/null -w '%{http_code}' -H 'cookie: ${cookie}' --data-urlencode '${data}' ${hub}${path}`))
+export async function post(path: string, cookie: string, ...data: string[]) {
+  const fields = data.map((field) => `--data-urlencode '${field}'`).join(' ')
+  return Number(await output('tablet', `${curl} -o /dev/null -w '%{http_code}' -H 'cookie: ${cookie}' ${fields} ${hub}${path}`))
+}
+
+// As the admin would: open Add node and keep the port it suggests.
+export async function addNode(cookie: string, name: string) {
+  const port = (await page('/nodes/new', cookie)).match(/name="port" value="(\d+)"/)?.[1]
+  return post('/nodes', cookie, `nodeName=${name}`, `port=${port}`)
+}
+
+export async function joinCommand(cookie: string, name: string) {
+  const html = await page(`/nodes/${(await node(name)).n}/join`, cookie)
+  return html.match(/<pre tabindex="0">(curl [^<]+)<\/pre>/)?.[1] ?? ''
+}
+
+// The tree's row for a node or a device, by its name.
+export async function row(cookie: string, name: string) {
+  const html = await page('/', cookie)
+  return html.match(new RegExp(`<tr[^>]*>\\n<td class="name">(?:(?!</tr>)[\\s\\S])*<b>${name}</b>(?:(?!</tr>)[\\s\\S])*</tr>`))?.[0] ?? ''
+}
+
+export async function status(cookie: string, name: string) {
+  return (await row(cookie, name)).match(/<i class="dot (\w+)"/)?.[1]
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { before, test } from 'node:test'
-import { data, node, output, page, post, restart, setPasswordAndLogin, sh } from './sim.ts'
+import { addNode, data, joinCommand, node, output, page, restart, setPasswordAndLogin, sh, status } from './sim.ts'
 
 const password = 'join node e2e'
 let cookie = ''
@@ -23,20 +23,15 @@ function fetchOnly(pin?: string) {
   return pin ? curl.replace(/sha256\/\/\S+/, `sha256//${pin}`) : curl
 }
 
-async function status() {
-  return (await page('/', cookie)).match(/<td><b>home-pi<\/b><\/td>\n<td><span class="pill (\w+)">/)?.[1]
-}
-
 async function readCommand() {
-  const html = await page('/', cookie)
-  command = html.match(/<td><b>home-pi<\/b><\/td>[\s\S]*?<code class="mono">(curl [^<]+)<\/code>/)?.[1] ?? ''
+  command = await joinCommand(cookie, 'home-pi')
   assert.match(command, /^curl -fsSk --pinnedpubkey sha256\/\/\S+ https:\/\/hub:8443\/join\/[0-9a-f]{64} \| sudo sh$/)
 }
 
 test('the tablet adds home-pi and sees its join command', async () => {
-  assert.equal(await post('/nodes', cookie, 'nodeName=home-pi'), 303)
+  assert.equal(await addNode(cookie, 'home-pi'), 303)
   await readCommand()
-  assert.equal(await status(), 'offline')
+  assert.equal(await status(cookie, 'home-pi'), 'offline')
 })
 
 test('with the wrong pin, home-pi refuses the hub and the command stays unused', async () => {
@@ -57,7 +52,7 @@ test('the tunnel carries traffic both ways', async () => {
 })
 
 test('the tablet sees home-pi online', async () => {
-  assert.equal(await status(), 'online')
+  assert.equal(await status(cookie, 'home-pi'), 'online')
 })
 
 test('the hub runs commands on home-pi over SSH', async () => {
@@ -86,7 +81,7 @@ test('home-pi dials the hub on its port', async () => {
 test('the join command works once', async () => {
   assert.equal((await sh('home-pi', fetchOnly())).code, 22)
   assert.ok(!(await data()).joins.some((join: { token: string }) => join.token === token()))
-  assert.ok(!(await page('/', cookie)).includes(`/join/${token()}`))
+  assert.match(await page(`/nodes/${(await node('home-pi')).n}/join`, cookie), /<h3>Not found<\/h3>/)
 })
 
 test('after a reboot home-pi brings postern0 and wg0 back by itself', async () => {

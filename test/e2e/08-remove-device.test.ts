@@ -35,7 +35,7 @@ test('the tablet and the phone both reach home-pi\'s LAN through their own devic
 
 test('the tablet removes the phone, which drops off home-pi', async () => {
   assert.equal(await post(`/nodes/${n}/devices/phone/remove`, cookie, ''), 303)
-  assert.doesNotMatch(await page(`/nodes/${n}`, cookie), /<b>phone<\/b>/)
+  assert.doesNotMatch(await page('/', cookie), /<b>phone<\/b>/)
   assert.doesNotMatch(await output('home-pi', 'cat /etc/wireguard/wg0.conf'), /### Client phone/)
   assert.equal((await sh('home-pi', 'test -e /etc/wireguard/clients/phone.conf')).code, 1)
 })

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { before, test } from 'node:test'
-import { node, output, page, post, setPasswordAndLogin, sh } from './sim.ts'
+import { addNode, node, output, row, setPasswordAndLogin, sh } from './sim.ts'
 
 const password = 'add node e2e'
 let cookie = ''
@@ -18,8 +18,8 @@ function peers() {
 }
 
 test('the tablet adds a node and sees it listed', async () => {
-  assert.equal(await post('/nodes', cookie, 'nodeName=Home Pi'), 303)
-  assert.match(await page('/', cookie), /<td><b>Home Pi<\/b><\/td>\n<td><span class="pill offline">offline<\/span><\/td>\n<td class="mono">10\.99\.0\.2<\/td>/)
+  assert.equal(await addNode(cookie, 'Home Pi'), 303)
+  assert.match(await row(cookie, 'Home Pi'), /<i class="dot offline" role="img" aria-label="offline"><\/i><b>Home Pi<\/b><\/span><\/div><\/td>\n<td class="mono address">10\.99\.0\.2<\/td>\n<td class="mono port"><span class="unit">port <\/span>51822<\/td>/)
 })
 
 test('the node is a live postern0 peer at 10.99.0.2', async () => {
@@ -27,7 +27,7 @@ test('the node is a live postern0 peer at 10.99.0.2', async () => {
 })
 
 test('a second node takes 10.99.0.3', async () => {
-  assert.equal(await post('/nodes', cookie, 'nodeName=Work Pi'), 303)
+  assert.equal(await addNode(cookie, 'Work Pi'), 303)
   assert.equal(await peers(), `${await publicKey('Home Pi')}\t10.99.0.2/32\n${await publicKey('Work Pi')}\t10.99.0.3/32`)
 })
 

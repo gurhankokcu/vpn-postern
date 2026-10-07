@@ -12,6 +12,7 @@
     "erasableSyntaxOnly": true,
     "verbatimModuleSyntax": true,
     "allowImportingTsExtensions": true,
+    "skipLibCheck": true,
     "types": ["node"]
   },
   "include": ["src", "test"]

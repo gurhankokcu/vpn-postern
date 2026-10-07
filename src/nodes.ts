@@ -33,6 +33,11 @@ function nextN(nodes: Node[]) {
   return n
 }
 
+export function nextPort() {
+  const { nodes } = load()
+  return defaultPort(hubPort(), nodes, nextN(nodes))
+}
+
 export function addNode(name: string, chosen?: number) {
   const data = load()
   if (data.nodes.some((node) => node.name.toLowerCase() === name.toLowerCase())) {
