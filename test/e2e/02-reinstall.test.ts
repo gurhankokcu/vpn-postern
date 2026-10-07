@@ -4,7 +4,7 @@ import { install, login, output, restart } from './sim.ts'
 
 const password = ' open sesame twice '
 const fresh = 'new password'
-const prompt = /VPN Postern is already installed\. \[u\]pdate, keeping nodes and users \/ \[r\]eset, erasing everything \/ \[c\]ancel:/
+const prompt = /VPN Postern is already installed\. \[u\]pdate, keeping nodes and devices \/ \[r\]eset, erasing everything \/ \[c\]ancel:/
 const running = /VPN Postern is running at https:\/\/172\.30\.0\.10:8443$/
 
 function state() {

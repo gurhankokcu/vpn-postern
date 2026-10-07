@@ -31,7 +31,7 @@ main() {
 
   choice=install
   if [ -e /opt/postern ] || [ -e "$data" ]; then
-    read -r -p 'VPN Postern is already installed. [u]pdate, keeping nodes and users / [r]eset, erasing everything / [c]ancel: ' answer < /dev/tty
+    read -r -p 'VPN Postern is already installed. [u]pdate, keeping nodes and devices / [r]eset, erasing everything / [c]ancel: ' answer < /dev/tty
     case $answer in
       [uU]*) choice=update ;;
       [rR]*) choice=reset ;;
