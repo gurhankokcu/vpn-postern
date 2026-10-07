@@ -18,6 +18,7 @@ const icons = {
   close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
   download: '<path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/>',
+  edit: '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>',
   join: '<path d="M12 19h8"/><path d="m4 17 6-6-6-6"/>',
   remove: '<path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
   show: '<rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/>',
@@ -135,7 +136,7 @@ export function treePage({ hubPort, nodes, joins, devices, message = '', modal =
     const acts = (waiting.has(node.n) ? link(`/nodes/${node.n}/join`, 'Join command', 'join') : '')
       + (list ? link(`/nodes/${node.n}/new-device`, 'Add device', 'add') : '')
       + removeButton(`/nodes/${node.n}/remove`, removeNodeQuestion(node, list))
-    rows.push(row(list ? '' : 'faint', [last ? 'elbow' : 'tee'], `${dot(status)}<b>${escapeHtml(node.name)}</b>`, address(node), `<span class="unit">port </span>${node.port}`, acts))
+    rows.push(row(list ? '' : 'faint', [last ? 'elbow' : 'tee'], `${dot(status)}<b>${escapeHtml(node.name)}</b>`, address(node), `<span class="value">${node.port}${link(`/nodes/${node.n}/port`, 'Change port', 'edit')}</span>`, acts))
     if (!list) {
       rows.push(aside([pass, 'elbow'], waiting.has(node.n) ? 'Waiting to join. Its devices show here once it does.' : 'Offline. Its devices show here once it is back.'))
     } else if (!list.length) {
@@ -205,6 +206,19 @@ export function deviceModal(node: Node, name: string, conf: string | null, svg =
 <div class="qr">${svg}</div>
 ${code(conf, download)}
 </div>`, 'widest')
+}
+
+export function portModal(node: Node, devices: Device[] | null, message = '', port: number | string = node.port) {
+  const title = `${escapeHtml(node.name)}'s port`
+  if (!devices) {
+    return modal(title, `<div class="modal-body"><div class="note">${escapeHtml(node.name)} is offline. Its port can change once it is back.</div></div>`)
+  }
+  return modal(title, `<form class="form" method="post" action="/nodes/${node.n}/port">
+${message && `<div class="note">${message}</div>`}
+<label>Port<span class="field"><input name="port" value="${escapeHtml(String(port))}" inputmode="numeric" autocomplete="off" autofocus required></span><small>The UDP port on the hub that ${escapeHtml(node.name)}'s devices dial.</small></label>
+${devices.length ? `<div class="warn">Don't forget to update the config on ${escapeHtml(node.name)}'s devices.</div>` : ''}
+${buttons('Save port')}
+</form>`)
 }
 
 export function notFoundPage() {

@@ -93,6 +93,20 @@ wg-quick strip wg0 | wg syncconf wg0 /dev/stdin
 `
 }
 
+export function moveEndpoints(port: number) {
+  return `for client in ${clients}/*.conf; do
+  if [ -f "$client" ]; then
+    sed -i '/^Endpoint = /s/:[0-9]*$/:${port}/' "$client"
+  fi
+done
+`
+}
+
+export function portScript(port: number) {
+  return `set -eu
+${moveEndpoints(port)}`
+}
+
 export function qr(text: string) {
   const svg = execFileSync('qrencode', ['-t', 'svg', '-o', '-'], { input: text, encoding: 'utf8' })
   return svg.slice(svg.indexOf('<svg'))
@@ -150,6 +164,10 @@ async function remove(node: Node, name: string) {
   }
   const write = await ssh(node, 'sh', removeScript(name, conf))
   return write.code === 0 ? 'removed' : 'offline'
+}
+
+export function movePort(node: Node, port: number) {
+  return queued(node, async () => (await ssh(node, 'sh', portScript(port))).code === 0 ? 'moved' : 'offline')
 }
 
 export async function showDevice(node: Node, name: string) {

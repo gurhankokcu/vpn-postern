@@ -492,6 +492,85 @@ test('removing an unknown device, or one on an unknown node, is not found', asyn
   }
 })
 
+function changePort(cookie: string, body: string, n = 1) {
+  return request(`/nodes/${n}/port`, {
+    method: 'POST',
+    headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' },
+    body,
+  })
+}
+
+test('a node\'s port opens over the tree, prefilled, reminding of its devices', async () => {
+  answer(wg0)
+  const html = await page('/nodes/1/port')
+  assert.match(html, /<h2 id="modal-title">home's port<\/h2>/)
+  assert.match(html, /<input name="port" value="51821"/)
+  assert.match(html, /Don't forget to update the config on home's devices\./)
+  assert.equal((await request('/nodes/9/port', { headers: { cookie: await session() } })).status, 404)
+})
+
+test('an offline node\'s port says it can change once it is back', async () => {
+  answer('', 255)
+  assert.match(await page('/nodes/1/port'), /home is offline\. Its port can change once it is back\./)
+})
+
+test('changing a port moves the devices\' configs, saves it and goes back to the tree', async () => {
+  answer('')
+  const res = await changePort(await session(), 'port=443')
+  assert.equal(res.status, 303)
+  assert.equal(res.headers.get('location'), '/')
+  assert.match(readFileSync(join(dir, 'ssh.log'), 'utf8'), /sed -i '\/\^Endpoint = \/s\/:\[0-9\]\*\$\/:443\/'/)
+  assert.deepEqual(load().nodes.map((node) => node.port), [443])
+})
+
+test('a port against the rule is refused with a note, keeping what was typed', async () => {
+  const cookie = await session()
+  for (const body of ['', 'port=', 'port=0', 'port=65536', 'port=4.4', 'port=4%2243']) {
+    answer(wg0)
+    const res = await changePort(cookie, body)
+    assert.equal(res.status, 400, body)
+    const html = await res.text()
+    assert.match(html, /<div class="note">A port is a whole number from 1 to 65535\.<\/div>/)
+    assert.ok(html.includes(`<input name="port" value="${body === 'port=4%2243' ? '4&#34;43' : body.slice(5)}"`), body)
+  }
+  assert.deepEqual(load().nodes, nodes)
+})
+
+test('a port the hub or another node uses is refused with a note', async () => {
+  save({ password: hash(password), nodes: [...nodes, { name: 'work', n: 2, port: 51822, publicKey: 'work' }], joins: [] })
+  const cookie = await session()
+  for (const port of [51820, 51822]) {
+    answer(wg0)
+    const res = await changePort(cookie, `port=${port}`)
+    assert.equal(res.status, 409)
+    assert.match(await res.text(), /<div class="note">The hub or another node already uses that port\.<\/div>/)
+  }
+  assert.deepEqual(load().nodes.map((node) => node.port), [51821, 51822])
+})
+
+test('changing the port of an offline node says so, changing nothing', async () => {
+  answer('', 255)
+  const res = await changePort(await session(), 'port=443')
+  assert.equal(res.status, 503)
+  assert.match(await res.text(), /home is offline\. Its port can change once it is back\./)
+  assert.deepEqual(load().nodes, nodes)
+})
+
+test('a node still waiting to join changes its port without being reached', async () => {
+  save({ password: hash(password), nodes, joins: [{ token: 'abc', n: 1, privateKey: 'key', expires: Date.now() + 60_000 }] })
+  answer('', 255)
+  const cookie = await session()
+  const html = await (await request('/nodes/1/port', { headers: { cookie } })).text()
+  assert.match(html, /<input name="port" value="51821"/)
+  assert.doesNotMatch(html, /class="warn"|is offline/)
+  assert.equal((await changePort(cookie, 'port=443')).status, 303)
+  assert.deepEqual(load().nodes.map((node) => node.port), [443])
+})
+
+test('changing an unknown node\'s port is not found', async () => {
+  assert.equal((await changePort(await session(), 'port=443', 9)).status, 404)
+})
+
 test('a password under 12 characters is refused', async () => {
   save({ password: hash('x'.repeat(11)), nodes, joins: [] })
   assert.equal((await login(`password=${'x'.repeat(11)}`)).status, 401)

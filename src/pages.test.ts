@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import type { TreeView } from './pages.ts'
 
 process.env.POSTERN_DIR = mkdtempSync(join(tmpdir(), 'postern-'))
-const { addDeviceModal, addNodeModal, deviceModal, joinModal, loginPage, notFoundPage, treePage } = await import('./pages.ts')
+const { addDeviceModal, addNodeModal, deviceModal, joinModal, loginPage, notFoundPage, portModal, treePage } = await import('./pages.ts')
 
 const home = { name: 'home', n: 2, port: 51822, publicKey: 'home' }
 const work = { name: 'work', n: 3, port: 443, publicKey: 'work' }
@@ -62,7 +62,7 @@ test('a node shows its status, address and port; an online one, its devices and 
   const html = treePage(both)
   const row = rowOf(html, 'home')
   assert.match(row, /<i class="guide tee"><\/i><span class="label"><i class="dot online" role="img" aria-label="online"><\/i><b>home<\/b>/)
-  assert.match(row, /<td class="mono address">10\.99\.0\.2<\/td>\n<td class="mono port"><span class="unit">port <\/span>51822<\/td>/)
+  assert.match(row, /<td class="mono address">10\.99\.0\.2<\/td>\n<td class="mono port"><span class="value">51822<a class="btn ghost act" href="\/nodes\/2\/port" aria-label="Change port">/)
   assert.match(row, /<a class="btn ghost act" href="\/nodes\/2\/new-device" aria-label="Add device">/)
   assert.match(rowOf(html, 'laptop'), /<i class="guide pass"><\/i><i class="guide tee"><\/i><span class="label"><b>laptop<\/b><\/span><\/div><\/td>\n<td class="mono address">10\.66\.66\.2<\/td>/)
   assert.match(rowOf(html, 'tablet'), /<i class="guide pass"><\/i><i class="guide elbow"><\/i>/)
@@ -152,6 +152,38 @@ test('add device asks only for a name, posting to its node', () => {
   assert.match(html, /<form class="form" method="post" action="\/nodes\/2\/devices">\n<div class="note">Taken\.<\/div>/)
   assert.match(html, /<input name="deviceName" value="mum" autocomplete="off" autofocus required>/)
   assert.doesNotMatch(html, /name="port"/)
+})
+
+test('a node\'s port can be changed, online or not', () => {
+  const html = treePage(both)
+  assert.match(rowOf(html, 'work'), /<a class="btn ghost act" href="\/nodes\/3\/port" aria-label="Change port">/)
+  assert.doesNotMatch(rowOf(html, 'laptop'), /Change port/)
+})
+
+test('changing a port asks for it, prefilled, posting to its node', () => {
+  const html = portModal(home, [])
+  assert.match(html, /<h2 id="modal-title">home's port<\/h2>/)
+  assert.match(html, /<form class="form" method="post" action="\/nodes\/2\/port">/)
+  assert.match(html, /<input name="port" value="51822" inputmode="numeric" autocomplete="off" autofocus required><\/span><small>The UDP port on the hub that home's devices dial\.<\/small>/)
+  assert.match(html, /<a class="btn ghost" href="\/">Cancel<\/a><button class="btn primary">Save port<\/button>/)
+  assert.doesNotMatch(html, /class="note"|class="warn"/)
+})
+
+test('changing the port of a node with devices reminds to update their configs', () => {
+  assert.match(portModal(home, [{ name: 'laptop', x: 2 }]), /<div class="warn">Don't forget to update the config on home's devices\.<\/div>/)
+})
+
+test('changing a port shows its message and what was typed, escaped', () => {
+  const html = portModal({ ...home, name: '<b>' }, [], 'Taken.', '4"3')
+  assert.match(html, /<div class="note">Taken\.<\/div>/)
+  assert.match(html, /name="port" value="4&#34;3"/)
+  assert.match(html, /<h2 id="modal-title">&#60;b&#62;'s port<\/h2>/)
+})
+
+test('an offline node\'s port says it can change once it is back, with no form', () => {
+  const html = portModal(home, null)
+  assert.match(html, /<div class="note">home is offline\. Its port can change once it is back\.<\/div>/)
+  assert.doesNotMatch(html, /<form/)
 })
 
 test('a device shows its QR code beside its config, to copy or download', () => {

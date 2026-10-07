@@ -4,12 +4,12 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createServer } from 'node:https'
 import { join } from 'node:path'
 import { clear, expiredCookie, fail, locked, sessionCookie, valid, verify } from './auth.ts'
-import { dir, live, load } from './data.ts'
+import { dir, live, load, type Node } from './data.ts'
 import { addDevice, listDevices, qr, removeDevice, showDevice } from './devices.ts'
 import { field, fields } from './fields.ts'
 import { joinScript } from './join.ts'
-import { addNode, dropJoin, findJoin, nextPort, removeNode } from './nodes.ts'
-import { addDeviceModal, addNodeModal, deviceModal, joinModal, loginPage, notFoundPage, treePage } from './pages.ts'
+import { addNode, changePort, dropJoin, findJoin, nextPort, removeNode, unjoined } from './nodes.ts'
+import { addDeviceModal, addNodeModal, deviceModal, joinModal, loginPage, notFoundPage, portModal, treePage } from './pages.ts'
 import { hubKey, hubPort, online } from './wg.ts'
 
 const css = readFileSync(join(import.meta.dirname, 'style.css'))
@@ -45,6 +45,11 @@ function hostname(req: IncomingMessage) {
 
 function findNode(n: string | undefined) {
   return load().nodes.find((node) => node.n === Number(n))
+}
+
+// A node still waiting to join has no devices to ask for.
+async function portDevices(node: Node) {
+  return unjoined(node.n) ? [] : listDevices(node)
 }
 
 // Only nodes seen in the last 3 minutes are asked for their devices, all at once.
@@ -143,6 +148,29 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
   if (joining && waiting) {
     const command = `curl -fsSk --pinnedpubkey sha256//${pin()} https://${req.headers.host ?? ''}/join/${waiting.token} | sudo sh`
     return send(res, 200, await tree(joinModal(joining, command, waiting.expires)))
+  }
+  const [, editN] = route.match(/^GET \/nodes\/(\d+)\/port$/) ?? []
+  const editing = findNode(editN)
+  if (editing) {
+    return send(res, 200, await tree(portModal(editing, await portDevices(editing))))
+  }
+  const [, portN] = route.match(/^POST \/nodes\/(\d+)\/port$/) ?? []
+  const porting = findNode(portN)
+  if (porting) {
+    const params = await form(req)
+    const port = field(params, 'port')
+    const again = async (status: number, message: string) => send(res, status, await tree(portModal(porting, await portDevices(porting), message, params.get('port') ?? '')))
+    const result = port === null ? 'port-invalid' : await changePort(porting.n, Number(port))
+    if (result === 'port-invalid') {
+      return again(400, 'A port is a whole number from 1 to 65535.')
+    }
+    if (result === 'port-taken') {
+      return again(409, 'The hub or another node already uses that port.')
+    }
+    if (result === 'offline') {
+      return send(res, 503, await tree(portModal(porting, null)))
+    }
+    return redirect(res, '/')
   }
   const [, openN] = route.match(/^GET \/nodes\/(\d+)\/new-device$/) ?? []
   const opening = findNode(openN)

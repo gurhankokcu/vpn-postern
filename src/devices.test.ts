@@ -7,7 +7,7 @@ import { beforeEach, test } from 'node:test'
 
 process.env.POSTERN_DIR = mkdtempSync(join(tmpdir(), 'postern-'))
 process.env.PATH = `${join(import.meta.dirname, '..', 'dev', 'bin')}:${process.env.PATH}`
-const { addDevice, addScript, clientConf, devices, freeX, listDevices, peer, qr, removeDevice, removeScript, showDevice, withoutDevice } = await import('./devices.ts')
+const { addDevice, addScript, clientConf, devices, freeX, listDevices, movePort, peer, portScript, qr, removeDevice, removeScript, showDevice, withoutDevice } = await import('./devices.ts')
 const dir = process.env.POSTERN_DIR
 const node = { name: 'home', n: 2, port: 443, publicKey: 'key' }
 
@@ -157,6 +157,18 @@ wg-quick strip wg0 | wg syncconf wg0 /dev/stdin
 `)
 })
 
+test('portScript is valid sh that moves the Endpoint port in every client config', () => {
+  const script = portScript(443)
+  execFileSync('sh', ['-n'], { input: script })
+  assert.equal(script, `set -eu
+for client in /etc/wireguard/clients/*.conf; do
+  if [ -f "$client" ]; then
+    sed -i '/^Endpoint = /s/:[0-9]*$/:443/' "$client"
+  fi
+done
+`)
+})
+
 test('qr encodes the text as an svg, without the XML prolog', () => {
   assert.equal(qr('CLIENT\n'), '<svg>qr</svg>\n')
   assert.equal(readFileSync(join(dir, 'qrencode.log'), 'utf8'), 'qrencode -t svg -o -\nCLIENT\n')
@@ -238,4 +250,22 @@ test('showDevice tells a missing device from an offline node', async () => {
   assert.equal(await showDevice(node, 'mum'), 'missing')
   answer('', 255)
   assert.equal(await showDevice(node, 'mum'), 'offline')
+})
+
+test('movePort runs portScript on the node', async () => {
+  answer('')
+  assert.equal(await movePort(node, 443), 'moved')
+  const [, script] = sshLog().split(/^ssh .*root@10\.99\.0\.2 sh\n/m)
+  assert.equal(script, portScript(443))
+})
+
+test('movePort is offline when the node cannot be reached', async () => {
+  answer('', 255)
+  assert.equal(await movePort(node, 443), 'offline')
+})
+
+test('movePort waits for an add on the same node', async () => {
+  answer(twoDevices)
+  await Promise.all([addDevice(node, 'tablet', 'hub.example'), movePort(node, 443)])
+  assert.match(sshLog(), /root@10\.99\.0\.2 sh\nset -eu\numask 077\n[\s\S]*root@10\.99\.0\.2 sh\nset -eu\nfor client/)
 })

@@ -1,4 +1,5 @@
 import { address, listenPort, type Join } from './data.ts'
+import { moveEndpoints } from './devices.ts'
 
 export type Hub = { host: string; port: number; publicKey: string; sshKey: string }
 
@@ -43,12 +44,7 @@ PostDown = nft delete table inet postern
 EOF
   fi
   sed -i 's/^ListenPort = .*/ListenPort = ${listenPort(join)}/' /etc/wireguard/wg0.conf
-  for client in /etc/wireguard/clients/*.conf; do
-    if [ -f "$client" ]; then
-      sed -i '/^Endpoint = /s/:[0-9]*$/:${port}/' "$client"
-    fi
-  done
-
+${moveEndpoints(port).replace(/^(?=.)/gm, '  ')}
   systemctl enable wg-quick@postern0
   systemctl restart wg-quick@postern0
   systemctl enable --now ssh

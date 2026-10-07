@@ -7,18 +7,22 @@ import { beforeEach, test } from 'node:test'
 process.env.POSTERN_DIR = mkdtempSync(join(tmpdir(), 'postern-'))
 process.env.PATH = `${join(import.meta.dirname, '..', 'dev', 'bin')}:${process.env.PATH}`
 const { load, save } = await import('./data.ts')
-const { addNode, dropJoin, findJoin, portProblem, removeNode } = await import('./nodes.ts')
+const { addNode, changePort, dropJoin, findJoin, portProblem, removeNode } = await import('./nodes.ts')
 const { ruleset } = await import('./nft.ts')
 const log = join(process.env.POSTERN_DIR, 'wg.log')
 const table = join(process.env.POSTERN_DIR, 'nft')
 const knownHosts = join(process.env.POSTERN_DIR, 'known_hosts')
 const listenPort = join(process.env.POSTERN_DIR, 'listen-port')
+const sshLog = join(process.env.POSTERN_DIR, 'ssh.log')
+const sshCode = join(process.env.POSTERN_DIR, 'ssh.code')
 
 beforeEach(() => {
   save({ password: 'salt:key', nodes: [], joins: [] })
   rmSync(log, { force: true })
   rmSync(table, { force: true })
   rmSync(listenPort, { force: true })
+  rmSync(sshLog, { force: true })
+  rmSync(sshCode, { force: true })
 })
 
 test('the first node is n 2, as the hub is 10.99.0.1', () => {
@@ -216,6 +220,58 @@ test('removing an unknown node runs no wg and no nft, and changes nothing', () =
   assert.equal(existsSync(log), false)
   assert.equal(existsSync(table), false)
   assert.deepEqual(load(), before)
+})
+
+test('changing a port moves the devices\' configs on the node, then saves it and rebuilds the forwards', async () => {
+  addNode('home')
+  addNode('work')
+  save({ ...load(), joins: [] })
+  assert.equal(await changePort(2, 443), 'changed')
+  assert.match(readFileSync(sshLog, 'utf8'), /root@10\.99\.0\.2 sh\nset -eu\nfor client in [^\n]*\n.*\n.*:443\//)
+  assert.deepEqual(load().nodes.map((node) => [node.n, node.port]), [[2, 443], [3, 51823]])
+  assert.equal(readFileSync(table, 'utf8'), ruleset(load().nodes))
+})
+
+test('a node may keep its own port', async () => {
+  addNode('home')
+  assert.equal(await changePort(2, 51822), 'changed')
+})
+
+test('a port against the rule, the hub\'s or another node\'s is refused, reaching no node and changing nothing', async () => {
+  addNode('home')
+  addNode('work')
+  rmSync(table)
+  const before = load()
+  assert.equal(await changePort(2, 0), 'port-invalid')
+  assert.equal(await changePort(2, 51820), 'port-taken')
+  assert.equal(await changePort(2, 51823), 'port-taken')
+  assert.equal(existsSync(sshLog), false)
+  assert.equal(existsSync(table), false)
+  assert.deepEqual(load(), before)
+})
+
+test('a node that cannot be reached keeps its port and its forward', async () => {
+  addNode('home')
+  save({ ...load(), joins: [] })
+  rmSync(table)
+  writeFileSync(sshCode, '255')
+  assert.equal(await changePort(2, 443), 'offline')
+  assert.deepEqual(load().nodes.map((node) => node.port), [51822])
+  assert.equal(existsSync(table), false)
+})
+
+test('a node still waiting to join changes its port without being reached', async () => {
+  addNode('home')
+  writeFileSync(sshCode, '255')
+  assert.equal(await changePort(2, 443), 'changed')
+  assert.equal(existsSync(sshLog), false)
+  assert.deepEqual(load().nodes.map((node) => node.port), [443])
+  assert.equal(readFileSync(table, 'utf8'), ruleset(load().nodes))
+})
+
+test('changing an unknown node\'s port is missing, reaching no node', async () => {
+  assert.equal(await changePort(9, 443), 'missing')
+  assert.equal(existsSync(sshLog), false)
 })
 
 test('a live join is found until it is dropped', () => {
