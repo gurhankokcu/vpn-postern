@@ -1,6 +1,6 @@
 #!/bin/sh
 # Stands in for wg off the hub: logs each call, numbers each key by the log line that made it,
-# and reads peer handshakes from $dir/handshakes.
+# reads peer handshakes from $dir/handshakes, and the hub's port from $dir/listen-port, 51820 without one.
 dir=${POSTERN_DIR:-.dev}
 echo "wg $*" >> "$dir/wg.log"
 case $1 in
@@ -9,6 +9,7 @@ case $1 in
   show)
     case $3 in
       public-key) echo 'hubpublic' ;;
+      listen-port) cat "$dir/listen-port" 2>/dev/null || echo 51820 ;;
       latest-handshakes) cat "$dir/handshakes" 2>/dev/null || true ;;
     esac ;;
 esac

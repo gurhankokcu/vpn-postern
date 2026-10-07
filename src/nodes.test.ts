@@ -12,11 +12,13 @@ const { ruleset } = await import('./nft.ts')
 const log = join(process.env.POSTERN_DIR, 'wg.log')
 const table = join(process.env.POSTERN_DIR, 'nft')
 const knownHosts = join(process.env.POSTERN_DIR, 'known_hosts')
+const listenPort = join(process.env.POSTERN_DIR, 'listen-port')
 
 beforeEach(() => {
   save({ password: 'salt:key', nodes: [], joins: [] })
   rmSync(log, { force: true })
   rmSync(table, { force: true })
+  rmSync(listenPort, { force: true })
 })
 
 test('the first node is n 2, as the hub is 10.99.0.1', () => {
@@ -43,22 +45,23 @@ test('254 is the last n', () => {
   const nodes = Array.from({ length: 252 }, (_, i) => ({ name: `node${i + 2}`, n: i + 2, port: 51822 + i, publicKey: 'key' }))
   save({ password: '', nodes, joins: [] })
   assert.equal(addNode('last'), 'added')
-  assert.deepEqual(load().nodes.at(-1), { name: 'last', n: 254, port: 52074, publicKey: 'public1' })
+  assert.deepEqual(load().nodes.at(-1), { name: 'last', n: 254, port: 52074, publicKey: 'public2' })
   assert.equal(addNode('extra'), 'full')
   assert.equal(load().nodes.length, 253)
 })
 
 test('a node keeps the public key of a fresh keypair', () => {
   addNode('home')
-  assert.deepEqual(load().nodes, [{ name: 'home', n: 2, port: 51822, publicKey: 'public1' }])
+  assert.deepEqual(load().nodes, [{ name: 'home', n: 2, port: 51822, publicKey: 'public2' }])
 })
 
 test('the peer joins postern0 live and is saved to its conf', () => {
   addNode('home')
   assert.deepEqual(readFileSync(log, 'utf8').trim().split('\n'), [
+    'wg show postern0 listen-port',
     'wg genkey',
     'wg pubkey',
-    'wg set postern0 peer public1 allowed-ips 10.99.0.2/32',
+    'wg set postern0 peer public2 allowed-ips 10.99.0.2/32',
     'wg-quick save postern0',
   ])
 })
@@ -80,14 +83,27 @@ test('a default port another node took is passed over for the next free one', ()
   assert.deepEqual(load().nodes.map((node) => [node.n, node.port]), [[2, 51823], [3, 51824]])
 })
 
-test('a port outside 1 to 65535, or the hub\'s own 51820, is refused', () => {
-  for (const port of [0, -1, 65536, 1.5, Number.NaN, 51820]) {
+test('a port outside 1 to 65535 is refused', () => {
+  for (const port of [0, -1, 65536, 1.5, Number.NaN]) {
     assert.equal(addNode('home', port), 'port-invalid', String(port))
   }
   for (const port of [1, 53, 443, 65535]) {
-    assert.equal(portProblem([], port), null, String(port))
+    assert.equal(portProblem(51820, [], port), null, String(port))
   }
   assert.deepEqual(load().nodes, [])
+})
+
+test('the hub\'s port, as postern0 listens on it, is taken, and 51820 is free once the hub moves off it', () => {
+  assert.equal(addNode('home', 51820), 'port-taken')
+  writeFileSync(listenPort, '443\n')
+  assert.equal(addNode('home', 443), 'port-taken')
+  assert.equal(addNode('home', 51820), 'added')
+})
+
+test('a default port passes over the hub\'s port', () => {
+  writeFileSync(listenPort, '51822\n')
+  addNode('home')
+  assert.deepEqual(load().nodes.map((node) => [node.n, node.port]), [[2, 51823]])
 })
 
 test('a port another node uses is refused', () => {
@@ -100,11 +116,11 @@ test('a refused node makes no keys and no peer', () => {
   addNode('home')
   rmSync(log)
   assert.equal(addNode('HOME'), 'taken')
-  assert.equal(addNode('work', 51820), 'port-invalid')
+  assert.equal(addNode('work', 0), 'port-invalid')
   assert.equal(addNode('work', 51822), 'port-taken')
   save({ password: '', nodes: Array.from({ length: 253 }, (_, i) => ({ name: `node${i + 2}`, n: i + 2, port: 51822 + i, publicKey: 'key' })), joins: [] })
   assert.equal(addNode('extra'), 'full')
-  assert.equal(existsSync(log), false)
+  assert.deepEqual(new Set(readFileSync(log, 'utf8').trim().split('\n')), new Set(['wg show postern0 listen-port']))
 })
 
 test('adding a node rebuilds the forwards from data.json', () => {
@@ -123,8 +139,8 @@ test('a refused node leaves the forwards alone', () => {
 test('the node keeps its public key, its join the private one', () => {
   addNode('home')
   const { nodes, joins } = load()
-  assert.deepEqual(nodes, [{ name: 'home', n: 2, port: 51822, publicKey: 'public1' }])
-  assert.deepEqual(joins.map((join) => [join.n, join.privateKey]), [[2, 'private1']])
+  assert.deepEqual(nodes, [{ name: 'home', n: 2, port: 51822, publicKey: 'public2' }])
+  assert.deepEqual(joins.map((join) => [join.n, join.privateKey]), [[2, 'private2']])
 })
 
 test('the join token is 32 random bytes in hex, good for an hour', () => {
@@ -155,8 +171,8 @@ test('adding a node drops expired joins', () => {
 test('removing a node takes its peer off postern0, live and in its conf', () => {
   addNode('home')
   assert.equal(removeNode(2), 'removed')
-  assert.deepEqual(readFileSync(log, 'utf8').trim().split('\n').slice(4), [
-    'wg set postern0 peer public1 remove',
+  assert.deepEqual(readFileSync(log, 'utf8').trim().split('\n').slice(5), [
+    'wg set postern0 peer public2 remove',
     'wg-quick save postern0',
   ])
 })

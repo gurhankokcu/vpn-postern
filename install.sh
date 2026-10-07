@@ -74,6 +74,18 @@ main() {
     done
   fi
 
+  port=
+  if [ "$choice" = reset ] || [ ! -f /etc/wireguard/postern0.conf ]; then
+    while true; do
+      read -r -p 'Hub port [51820]: ' port < /dev/tty
+      port=${port:-51820}
+      if [[ $port =~ ^[0-9]{1,5}$ ]] && [ "$port" -ge 1 ] && [ "$port" -le 65535 ]; then
+        break
+      fi
+      echo 'A port is a whole number from 1 to 65535.'
+    done
+  fi
+
   if [ "$choice" = reset ]; then
     echo '==> Erasing VPN Postern'
     if [ -f /etc/systemd/system/postern.service ]; then
@@ -131,7 +143,7 @@ EOF
   if [ ! -f /etc/wireguard/postern0.conf ]; then
     (
       umask 077
-      printf '[Interface]\nAddress = 10.99.0.1/24\nListenPort = 51820\nPrivateKey = %s\n' "$(wg genkey)" > /etc/wireguard/postern0.conf
+      printf '[Interface]\nAddress = 10.99.0.1/24\nListenPort = %s\nPrivateKey = %s\n' "$port" "$(wg genkey)" > /etc/wireguard/postern0.conf
     )
   fi
   systemctl enable --now wg-quick@postern0

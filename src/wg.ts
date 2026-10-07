@@ -18,6 +18,10 @@ export function hubKey() {
   return run('wg', ['show', 'postern0', 'public-key'])
 }
 
+export function hubPort() {
+  return Number(run('wg', ['show', 'postern0', 'listen-port']))
+}
+
 export function handshakes() {
   const lines = run('wg', ['show', 'postern0', 'latest-handshakes']).split('\n').filter(Boolean)
   return new Map(lines.map((line) => {

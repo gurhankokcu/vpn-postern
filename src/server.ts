@@ -10,7 +10,7 @@ import { field, fields } from './fields.ts'
 import { joinScript } from './join.ts'
 import { addNode, dropJoin, findJoin, removeNode } from './nodes.ts'
 import { devicePage, loginPage, nodePage, nodesPage, notFoundPage } from './pages.ts'
-import { handshakes, hubKey } from './wg.ts'
+import { handshakes, hubKey, hubPort } from './wg.ts'
 
 const css = readFileSync(join(import.meta.dirname, 'style.css'))
 
@@ -85,7 +85,7 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
       return send(res, 404, 'This join command is used or expired.\n', 'text/plain')
     }
     const sshKey = readFileSync(join(dir, 'id_ed25519.pub'), 'utf8').trim()
-    const script = joinScript(found, node.port, { host: hostname(req), publicKey: hubKey(), sshKey })
+    const script = joinScript(found, node.port, { host: hostname(req), port: hubPort(), publicKey: hubKey(), sshKey })
     dropJoin(token)
     return send(res, 200, script, 'text/plain')
   }

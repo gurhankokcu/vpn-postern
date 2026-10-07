@@ -116,10 +116,11 @@ test('a reset asks for the password until it is typed twice the same', async () 
   await output('hub', 'touch /var/lib/postern/stray')
   const before = await keys()
   const postern0 = await started('wg-quick@postern0')
-  const { code, out } = await install(['r', '', 'x'.repeat(11), 'x'.repeat(257), fresh, 'typo', fresh, fresh])
+  const { code, out } = await install(['r', '', 'x'.repeat(11), 'x'.repeat(257), fresh, 'typo', fresh, fresh, '0', '70000', 'x', '443'])
   assert.equal(code, 0, out)
   assert.equal(out.match(/A password is 12 to 256 characters\.\nAdmin password:/g)?.length, 3)
   assert.match(out, /Passwords don't match\.\nAdmin password:/)
+  assert.equal(out.match(/A port is a whole number from 1 to 65535\.\nHub port \[51820\]:/g)?.length, 3)
   assert.match(out, /==> Erasing VPN Postern/)
   assert.match(out, running)
   assert.notEqual(await started('wg-quick@postern0'), postern0)
@@ -132,6 +133,10 @@ test('a reset asks for the password until it is typed twice the same', async () 
 test('a reset erases the data', async () => {
   assert.equal(await output('hub', 'ls /var/lib/postern'), 'data.json\nid_ed25519\nid_ed25519.pub\npostern.nft\ntls.crt\ntls.key')
   assert.equal(await output('hub', 'systemctl is-active postern wg-quick@postern0'), 'active\nactive')
+})
+
+test('after a reset postern0 listens on the port it was given, for every later test', async () => {
+  assert.equal(await output('hub', 'wg show postern0 listen-port'), '443')
 })
 
 test('after a reset the old password is refused and the new one logs in', async () => {

@@ -79,6 +79,10 @@ test('home-pi runs wg0 on its port, forwarding and masquerading its users out of
   assert.match(await output('home-pi', 'nft list table inet postern'), /ip saddr 10\.66\.66\.0\/24 oifname != \{ "wg0", "postern0" \} masquerade/)
 })
 
+test('home-pi dials the hub on its port', async () => {
+  assert.match(await output('home-pi', 'cat /etc/wireguard/postern0.conf'), /^Endpoint = hub:443$/m)
+})
+
 test('the join command works once', async () => {
   assert.equal((await sh('home-pi', fetchOnly())).code, 22)
   assert.ok(!(await data()).joins.some((join: { token: string }) => join.token === token()))

@@ -18,7 +18,7 @@ test('answering no changes nothing', async () => {
 })
 
 test('a fresh install runs to the end', async () => {
-  const { code, out } = await install(['y', password, password])
+  const { code, out } = await install(['y', password, password, ''])
   assert.equal(code, 0, out)
   assert.match(out, /VPN Postern is running at https:\/\/172\.30\.0\.10:8443$/)
 })

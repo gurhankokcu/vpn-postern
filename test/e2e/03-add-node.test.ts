@@ -34,7 +34,7 @@ test('a second node takes 10.99.0.3', async () => {
 test('postern0.conf keeps the interface and both peers, readable by root alone', async () => {
   const conf = await output('hub', 'cat /etc/wireguard/postern0.conf')
   assert.match(conf, /^Address = 10\.99\.0\.1\/24$/m)
-  assert.match(conf, /^ListenPort = 51820$/m)
+  assert.match(conf, /^ListenPort = 443$/m)
   assert.ok(conf.includes(`PrivateKey = ${await output('hub', 'wg show postern0 private-key')}\n`))
   assert.ok(conf.includes(`[Peer]\nPublicKey = ${await publicKey('Home Pi')}\nAllowedIPs = 10.99.0.2/32`))
   assert.ok(conf.includes(`[Peer]\nPublicKey = ${await publicKey('Work Pi')}\nAllowedIPs = 10.99.0.3/32`))

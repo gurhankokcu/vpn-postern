@@ -11,7 +11,7 @@ const { joinScript } = await import('./join.ts')
 const script = joinScript(
   { token: 'abc', n: 7, privateKey: 'nodeprivate=', expires: 0 },
   443,
-  { host: '203.0.113.5', publicKey: 'hubpublic=', sshKey: 'ssh-ed25519 AAAAhub postern' },
+  { host: '203.0.113.5', port: 53, publicKey: 'hubpublic=', sshKey: 'ssh-ed25519 AAAAhub postern' },
 )
 
 test('the join script is valid sh', () => {
@@ -31,7 +31,7 @@ test('the join script turns on forwarding, now and on every boot', () => {
   assert.match(script, /^  echo 'net\.ipv4\.ip_forward = 1' > \/etc\/sysctl\.d\/99-postern\.conf\n  sysctl -q -p \/etc\/sysctl\.d\/99-postern\.conf$/m)
 })
 
-test('the join script writes postern0.conf for node n, dialing the hub', () => {
+test('the join script writes postern0.conf for node n, dialing the hub on its port', () => {
   assert.ok(script.includes(`cat > /etc/wireguard/postern0.conf <<'EOF'
 [Interface]
 Address = 10.99.0.7/32
@@ -39,7 +39,7 @@ PrivateKey = nodeprivate=
 
 [Peer]
 PublicKey = hubpublic=
-Endpoint = 203.0.113.5:51820
+Endpoint = 203.0.113.5:53
 AllowedIPs = 10.99.0.1/32
 PersistentKeepalive = 25
 EOF

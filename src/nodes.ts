@@ -2,21 +2,24 @@ import { randomBytes } from 'node:crypto'
 import { listenPort, live, load, save, type Node } from './data.ts'
 import { rebuild } from './nft.ts'
 import { forget } from './ssh.ts'
-import { addPeer, keypair, removePeer } from './wg.ts'
+import { addPeer, hubPort, keypair, removePeer } from './wg.ts'
 
 const joinMs = 60 * 60 * 1000
 
-// The hub's own tunnel listens on 51820.
-export function portProblem(nodes: Node[], port: number) {
-  if (!Number.isInteger(port) || port < 1 || port > 65535 || port === 51820) {
-    return 'port-invalid'
-  }
-  return nodes.some((node) => node.port === port) ? 'port-taken' : null
+function inRange(port: number) {
+  return Number.isInteger(port) && port >= 1 && port <= 65535
 }
 
-function defaultPort(nodes: Node[], n: number) {
+export function portProblem(hub: number, nodes: Node[], port: number) {
+  if (!inRange(port)) {
+    return 'port-invalid'
+  }
+  return port === hub || nodes.some((node) => node.port === port) ? 'port-taken' : null
+}
+
+function defaultPort(hub: number, nodes: Node[], n: number) {
   let port = listenPort({ n })
-  while (nodes.some((node) => node.port === port)) {
+  while (portProblem(hub, nodes, port)) {
     port++
   }
   return port
@@ -39,8 +42,9 @@ export function addNode(name: string, chosen?: number) {
   if (n > 254) {
     return 'full'
   }
-  const port = chosen ?? defaultPort(data.nodes, n)
-  const problem = portProblem(data.nodes, port)
+  const hub = hubPort()
+  const port = chosen ?? defaultPort(hub, data.nodes, n)
+  const problem = portProblem(hub, data.nodes, port)
   if (problem) {
     return problem
   }

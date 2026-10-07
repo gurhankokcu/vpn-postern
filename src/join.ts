@@ -1,6 +1,6 @@
 import { address, listenPort, type Join } from './data.ts'
 
-export type Hub = { host: string; publicKey: string; sshKey: string }
+export type Hub = { host: string; port: number; publicKey: string; sshKey: string }
 
 // The node runs this as `curl … | sudo sh`, so the whole script is one function, called on
 // its last line: a download cut short runs nothing, and nothing it runs can read the rest as input.
@@ -24,7 +24,7 @@ PrivateKey = ${join.privateKey}
 
 [Peer]
 PublicKey = ${hub.publicKey}
-Endpoint = ${hub.host}:51820
+Endpoint = ${hub.host}:${hub.port}
 AllowedIPs = 10.99.0.1/32
 PersistentKeepalive = 25
 EOF
