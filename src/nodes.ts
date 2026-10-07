@@ -2,8 +2,8 @@ import { randomBytes } from 'node:crypto'
 import { listenPort, live, load, save, type Node } from './data.ts'
 import { movePort } from './devices.ts'
 import { rebuild } from './nft.ts'
-import { forget } from './ssh.ts'
-import { addPeer, hubPort, keypair, removePeer } from './wg.ts'
+import { forget, ssh } from './ssh.ts'
+import { addPeer, hubPort, hubPortFree, keypair, online, removePeer, setHubPort } from './wg.ts'
 
 const joinMs = 60 * 60 * 1000
 
@@ -98,6 +98,61 @@ export async function changePort(n: number, port: number) {
   const fresh = load()
   save({ ...fresh, nodes: fresh.nodes.map((other) => (other.n === n ? { ...other, port } : other)) })
   rebuild()
+  return 'changed'
+}
+
+const postern0 = '/etc/wireguard/postern0.conf'
+
+export function stageScript(port: number) {
+  return `set -eu
+umask 077
+sed '/^Endpoint = /s/:[0-9]*$/:${port}/' ${postern0} > ${postern0}.next
+`
+}
+
+export const unstageScript = `rm -f ${postern0}.next
+`
+
+// The node applies the new port on a timer, after this call is over and the hub has moved.
+export const switchScript = `set -eu
+mv ${postern0}.next ${postern0}
+systemd-run --quiet --on-active=3 sh -c 'wg-quick strip postern0 | wg syncconf postern0 /dev/stdin'
+`
+
+// A node that has joined dials the hub's port, so it must be reached to move with it.
+export function offlineNodes() {
+  const { nodes } = load()
+  const up = online(nodes)
+  return nodes.filter((node) => !up.has(node.n) && !unjoined(node.n))
+}
+
+// Every node stages the new port first, so one that cannot be reached leaves them all on the old.
+export async function changeHubPort(port: number) {
+  const hub = hubPort()
+  if (port === hub) {
+    return 'changed'
+  }
+  const { nodes } = load()
+  const problem = portProblem(hub, nodes, port)
+  if (problem) {
+    return problem
+  }
+  const offline = offlineNodes()
+  if (offline.length) {
+    return offline
+  }
+  if (!hubPortFree(port)) {
+    return 'port-busy'
+  }
+  const joined = nodes.filter((node) => !unjoined(node.n))
+  const staged = await Promise.all(joined.map((node) => ssh(node, 'sh', stageScript(port))))
+  const failed = joined.filter((_, i) => staged[i].code !== 0)
+  if (failed.length) {
+    await Promise.all(joined.map((node) => ssh(node, 'sh', unstageScript)))
+    return failed
+  }
+  await Promise.all(joined.map((node) => ssh(node, 'sh', switchScript)))
+  setHubPort(port)
   return 'changed'
 }
 

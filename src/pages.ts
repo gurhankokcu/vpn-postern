@@ -124,7 +124,7 @@ function removeNodeQuestion(node: Node, devices: Device[] | null | undefined) {
 
 export function treePage({ hubPort, nodes, joins, devices, message = '', modal = '' }: TreeView) {
   const waiting = new Set(joins.map((join) => join.n))
-  const rows = [row('hub', [], `${dot('online')}<b>Hub</b>`, '10.99.0.1', String(hubPort), link('/nodes/new', 'Add node', 'add'))]
+  const rows = [row('hub', [], `${dot('online')}<b>Hub</b>`, '10.99.0.1', `<span class="value">${hubPort}${link('/hub/port', 'Change port', 'edit')}</span>`, link('/nodes/new', 'Add node', 'add'))]
   if (!nodes.length) {
     rows.push(aside(['elbow'], 'No nodes yet. Add one for each home network to reach.', '<a class="btn primary first" href="/nodes/new">Add your first node</a>'))
   }
@@ -217,6 +217,23 @@ export function portModal(node: Node, devices: Device[] | null, message = '', po
 ${message && `<div class="note">${message}</div>`}
 <label>Port<span class="field"><input name="port" value="${escapeHtml(String(port))}" inputmode="numeric" autocomplete="off" autofocus required></span><small>The UDP port on the hub that ${escapeHtml(node.name)}'s devices dial.</small></label>
 ${devices.length ? `<div class="warn">Don't forget to update the config on ${escapeHtml(node.name)}'s devices.</div>` : ''}
+${buttons('Save port')}
+</form>`)
+}
+
+function names(nodes: Node[]) {
+  const all = nodes.map((node) => escapeHtml(node.name))
+  return all.length === 1 ? all[0] : `${all.slice(0, -1).join(', ')} and ${all.at(-1)}`
+}
+
+export function hubPortModal(port: number | string, offline: Node[], message = '') {
+  if (offline.length) {
+    return modal('Hub\'s port', `<div class="modal-body"><div class="note">${names(offline)} ${offline.length === 1 ? 'is offline. Wait until it is back to change the hub\'s port, or remove it if it is gone for good.' : 'are offline. Wait until they are back to change the hub\'s port, or remove them if they are gone for good.'}</div></div>`)
+  }
+  return modal('Hub\'s port', `<form class="form" method="post" action="/hub/port">
+${message && `<div class="note">${message}</div>`}
+<label>Port<span class="field"><input name="port" value="${escapeHtml(String(port))}" inputmode="numeric" autocomplete="off" autofocus required></span><small>The UDP port on the hub that every node dials.</small></label>
+<div class="warn">Each node drops for a few seconds while it moves to the new port.</div>
 ${buttons('Save port')}
 </form>`)
 }

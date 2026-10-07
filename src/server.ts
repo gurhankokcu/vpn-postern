@@ -8,8 +8,8 @@ import { dir, live, load, type Node } from './data.ts'
 import { addDevice, listDevices, qr, removeDevice, showDevice } from './devices.ts'
 import { field, fields } from './fields.ts'
 import { joinScript } from './join.ts'
-import { addNode, changePort, dropJoin, findJoin, nextPort, removeNode, unjoined } from './nodes.ts'
-import { addDeviceModal, addNodeModal, deviceModal, joinModal, loginPage, notFoundPage, portModal, treePage } from './pages.ts'
+import { addNode, changeHubPort, changePort, dropJoin, findJoin, nextPort, offlineNodes, removeNode, unjoined } from './nodes.ts'
+import { addDeviceModal, addNodeModal, deviceModal, hubPortModal, joinModal, loginPage, notFoundPage, portModal, treePage } from './pages.ts'
 import { hubKey, hubPort, online } from './wg.ts'
 
 const css = readFileSync(join(import.meta.dirname, 'style.css'))
@@ -108,6 +108,28 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
   }
   if (route === 'GET /') {
     return send(res, 200, await tree())
+  }
+  if (route === 'GET /hub/port') {
+    return send(res, 200, await tree(hubPortModal(hubPort(), offlineNodes())))
+  }
+  if (route === 'POST /hub/port') {
+    const params = await form(req)
+    const port = field(params, 'port')
+    const again = async (status: number, message: string) => send(res, status, await tree(hubPortModal(params.get('port') ?? '', [], message)))
+    const result = port === null ? 'port-invalid' : await changeHubPort(Number(port))
+    if (result === 'port-invalid') {
+      return again(400, 'A port is a whole number from 1 to 65535.')
+    }
+    if (result === 'port-taken') {
+      return again(409, 'A node already uses that port.')
+    }
+    if (result === 'port-busy') {
+      return again(409, 'Something else on the hub already uses that port.')
+    }
+    if (result !== 'changed') {
+      return send(res, 503, await tree(hubPortModal('', result)))
+    }
+    return redirect(res, '/')
   }
   if (route === 'GET /nodes/new') {
     return send(res, 200, await tree(addNodeModal(nextPort())))

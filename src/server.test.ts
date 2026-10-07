@@ -34,7 +34,7 @@ after(() => {
 beforeEach(() => {
   save({ password: hash(password), nodes, joins: [] })
   clear('127.0.0.1')
-  for (const file of ['handshakes', 'listen-port', 'ssh.log', 'ssh.out', 'ssh.code', 'ssh.hang']) {
+  for (const file of ['handshakes', 'listen-port', 'busy-port', 'ssh.log', 'ssh.out', 'ssh.code', 'ssh.hang']) {
     rmSync(join(dir, file), { force: true })
   }
 })
@@ -192,7 +192,7 @@ test('the tree reads the nodes afresh on every request', async () => {
 
 test('the tree shows the port postern0 listens on as the hub\'s', async () => {
   writeFileSync(join(dir, 'listen-port'), '443\n')
-  assert.match(await page('/'), /<td class="mono address">10\.99\.0\.1<\/td>\n<td class="mono port">443<\/td>/)
+  assert.match(await page('/'), /<td class="mono address">10\.99\.0\.1<\/td>\n<td class="mono port"><span class="value">443<a /)
 })
 
 test('an offline node is not asked for its devices', async () => {
@@ -565,6 +565,69 @@ test('a node still waiting to join changes its port without being reached', asyn
   assert.doesNotMatch(html, /class="warn"|is offline/)
   assert.equal((await changePort(cookie, 'port=443')).status, 303)
   assert.deepEqual(load().nodes.map((node) => node.port), [443])
+})
+
+function changeHubPort(cookie: string, body: string) {
+  return request('/hub/port', {
+    method: 'POST',
+    headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' },
+    body,
+  })
+}
+
+test('the hub\'s port opens over the tree, prefilled', async () => {
+  online()
+  writeFileSync(join(dir, 'listen-port'), '443\n')
+  const html = await page('/hub/port')
+  assert.match(html, /<h2 id="modal-title">Hub's port<\/h2>/)
+  assert.match(html, /<input name="port" value="443"/)
+})
+
+test('the hub\'s port names the offline nodes it waits for', async () => {
+  assert.match(await page('/hub/port'), /home is offline\. Wait until it is back to change the hub's port, or remove it if it is gone for good\./)
+})
+
+test('changing the hub\'s port moves every node and the hub, and goes back to the tree', async () => {
+  online()
+  answer('')
+  const res = await changeHubPort(await session(), 'port=443')
+  assert.equal(res.status, 303)
+  assert.equal(res.headers.get('location'), '/')
+  assert.match(readFileSync(join(dir, 'ssh.log'), 'utf8'), /^mv \/etc\/wireguard\/postern0\.conf\.next \/etc\/wireguard\/postern0\.conf$/m)
+  assert.equal(readFileSync(join(dir, 'listen-port'), 'utf8'), '443\n')
+})
+
+test('the hub\'s port against the rule, or a node\'s, is refused with a note, keeping what was typed', async () => {
+  online()
+  const cookie = await session()
+  const bad = await changeHubPort(cookie, 'port=4%2243')
+  assert.equal(bad.status, 400)
+  const html = await bad.text()
+  assert.match(html, /<div class="note">A port is a whole number from 1 to 65535\.<\/div>/)
+  assert.match(html, /<input name="port" value="4&#34;43"/)
+  const taken = await changeHubPort(cookie, 'port=51821')
+  assert.equal(taken.status, 409)
+  assert.match(await taken.text(), /<div class="note">A node already uses that port\.<\/div>/)
+  assert.equal(existsSync(join(dir, 'listen-port')), false)
+})
+
+test('a port another service on the hub holds is refused with a note', async () => {
+  online()
+  writeFileSync(join(dir, 'busy-port'), '53\n')
+  const res = await changeHubPort(await session(), 'port=53')
+  assert.equal(res.status, 409)
+  assert.match(await res.text(), /<div class="note">Something else on the hub already uses that port\.<\/div>/)
+  assert.doesNotMatch(readFileSync(join(dir, 'ssh.log'), 'utf8'), / sh$/m)
+  assert.equal(existsSync(join(dir, 'listen-port')), false)
+})
+
+test('changing the hub\'s port while a node cannot be reached names it, changing nothing', async () => {
+  online()
+  answer('', 255)
+  const res = await changeHubPort(await session(), 'port=443')
+  assert.equal(res.status, 503)
+  assert.match(await res.text(), /home is offline\. Wait until it is back to change the hub's port, or remove it if it is gone for good\./)
+  assert.equal(readFileSync(join(dir, 'listen-port'), 'utf8'), '51820\n')
 })
 
 test('changing an unknown node\'s port is not found', async () => {

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -7,7 +8,7 @@ import { beforeEach, test } from 'node:test'
 process.env.POSTERN_DIR = mkdtempSync(join(tmpdir(), 'postern-'))
 process.env.PATH = `${join(import.meta.dirname, '..', 'dev', 'bin')}:${process.env.PATH}`
 const { load, save } = await import('./data.ts')
-const { addNode, changePort, dropJoin, findJoin, portProblem, removeNode } = await import('./nodes.ts')
+const { addNode, changeHubPort, changePort, dropJoin, findJoin, offlineNodes, portProblem, removeNode, stageScript, switchScript, unstageScript } = await import('./nodes.ts')
 const { ruleset } = await import('./nft.ts')
 const log = join(process.env.POSTERN_DIR, 'wg.log')
 const table = join(process.env.POSTERN_DIR, 'nft')
@@ -15,6 +16,8 @@ const knownHosts = join(process.env.POSTERN_DIR, 'known_hosts')
 const listenPort = join(process.env.POSTERN_DIR, 'listen-port')
 const sshLog = join(process.env.POSTERN_DIR, 'ssh.log')
 const sshCode = join(process.env.POSTERN_DIR, 'ssh.code')
+const handshakes = join(process.env.POSTERN_DIR, 'handshakes')
+const busyPort = join(process.env.POSTERN_DIR, 'busy-port')
 
 beforeEach(() => {
   save({ password: 'salt:key', nodes: [], joins: [] })
@@ -23,6 +26,8 @@ beforeEach(() => {
   rmSync(listenPort, { force: true })
   rmSync(sshLog, { force: true })
   rmSync(sshCode, { force: true })
+  rmSync(handshakes, { force: true })
+  rmSync(busyPort, { force: true })
 })
 
 test('the first node is n 2, as the hub is 10.99.0.1', () => {
@@ -272,6 +277,96 @@ test('a node still waiting to join changes its port without being reached', asyn
 test('changing an unknown node\'s port is missing, reaching no node', async () => {
   assert.equal(await changePort(9, 443), 'missing')
   assert.equal(existsSync(sshLog), false)
+})
+
+const home = { name: 'home', n: 2, port: 51822, publicKey: 'home' }
+const work = { name: 'work', n: 3, port: 51823, publicKey: 'work' }
+
+function seen(...keys: string[]) {
+  writeFileSync(handshakes, keys.map((key) => `${key}\t${Math.floor(Date.now() / 1000)}\n`).join(''))
+}
+
+function reached() {
+  return readFileSync(sshLog, 'utf8').match(/root@10\.99\.0\.\d+(?= sh$)/gm)?.sort()
+}
+
+test('stageScript is valid sh that writes postern0.conf with the new port beside it, privately', () => {
+  execFileSync('sh', ['-n'], { input: stageScript(443) })
+  assert.equal(stageScript(443), `set -eu
+umask 077
+sed '/^Endpoint = /s/:[0-9]*$/:443/' /etc/wireguard/postern0.conf > /etc/wireguard/postern0.conf.next
+`)
+})
+
+test('switchScript is valid sh that puts the staged conf in place and applies it on a timer', () => {
+  execFileSync('sh', ['-n'], { input: switchScript })
+  execFileSync('sh', ['-n'], { input: unstageScript })
+  assert.equal(switchScript, `set -eu
+mv /etc/wireguard/postern0.conf.next /etc/wireguard/postern0.conf
+systemd-run --quiet --on-active=3 sh -c 'wg-quick strip postern0 | wg syncconf postern0 /dev/stdin'
+`)
+  assert.equal(unstageScript, 'rm -f /etc/wireguard/postern0.conf.next\n')
+})
+
+test('offline nodes are the joined ones without a recent handshake', () => {
+  save({ password: '', nodes: [home, work, { ...work, name: 'new', n: 4, publicKey: 'new' }], joins: [{ token: 'abc', n: 4, privateKey: 'key', expires: Date.now() + 60_000 }] })
+  seen('home')
+  assert.deepEqual(offlineNodes().map((node) => node.name), ['work'])
+})
+
+test('changing the hub\'s port stages it on every joined node, then switches them and moves the hub', async () => {
+  save({ password: '', nodes: [home, work, { ...work, name: 'new', n: 4, port: 51824, publicKey: 'new' }], joins: [{ token: 'abc', n: 4, privateKey: 'key', expires: Date.now() + 60_000 }] })
+  seen('home', 'work')
+  assert.equal(await changeHubPort(443), 'changed')
+  assert.deepEqual(reached(), ['root@10.99.0.2', 'root@10.99.0.2', 'root@10.99.0.3', 'root@10.99.0.3'])
+  const ssh = readFileSync(sshLog, 'utf8')
+  assert.equal(ssh.split(stageScript(443)).length, 3)
+  assert.equal(ssh.split(switchScript).length, 3)
+  assert.ok(ssh.lastIndexOf(stageScript(443)) < ssh.indexOf(switchScript))
+  assert.match(readFileSync(log, 'utf8'), /^wg set postern0 listen-port 443\nwg-quick save postern0\n$/m)
+  assert.equal(readFileSync(listenPort, 'utf8'), '443\n')
+})
+
+test('the hub keeping its port changes nothing', async () => {
+  save({ password: '', nodes: [home], joins: [] })
+  assert.equal(await changeHubPort(51820), 'changed')
+  assert.equal(existsSync(sshLog), false)
+  assert.equal(existsSync(listenPort), false)
+})
+
+test('the hub\'s port against the rule, or a node\'s, is refused, reaching no node', async () => {
+  save({ password: '', nodes: [home], joins: [] })
+  seen('home')
+  assert.equal(await changeHubPort(0), 'port-invalid')
+  assert.equal(await changeHubPort(51822), 'port-taken')
+  assert.equal(existsSync(sshLog), false)
+  assert.equal(existsSync(listenPort), false)
+})
+
+test('the hub\'s port waits for every joined node to be online, reaching none', async () => {
+  save({ password: '', nodes: [home, work], joins: [] })
+  seen('home')
+  assert.deepEqual(await changeHubPort(443), [work])
+  assert.equal(existsSync(sshLog), false)
+  assert.equal(existsSync(listenPort), false)
+})
+
+test('a port another service on the hub holds is refused, reaching no node', async () => {
+  save({ password: '', nodes: [home], joins: [] })
+  seen('home')
+  writeFileSync(busyPort, '53\n')
+  assert.equal(await changeHubPort(53), 'port-busy')
+  assert.equal(existsSync(sshLog), false)
+  assert.equal(existsSync(listenPort), false)
+})
+
+test('a node that cannot be reached unstages every node and leaves the hub\'s port alone', async () => {
+  save({ password: '', nodes: [home], joins: [] })
+  seen('home')
+  writeFileSync(sshCode, '255')
+  assert.deepEqual(await changeHubPort(443), [home])
+  assert.ok(readFileSync(sshLog, 'utf8').endsWith(unstageScript))
+  assert.equal(readFileSync(listenPort, 'utf8'), '51820\n')
 })
 
 test('a live join is found until it is dropped', () => {

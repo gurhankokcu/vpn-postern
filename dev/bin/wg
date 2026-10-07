@@ -1,11 +1,17 @@
 #!/bin/sh
 # Stands in for wg off the hub: logs each call, numbers each key by the log line that made it,
-# reads peer handshakes from $dir/handshakes, and the hub's port from $dir/listen-port, 51820 without one.
+# reads peer handshakes from $dir/handshakes, keeps the hub's port in $dir/listen-port, 51820 without one,
+# and refuses the port in $dir/busy-port.
 dir=${POSTERN_DIR:-.dev}
 echo "wg $*" >> "$dir/wg.log"
 case $1 in
   genkey) echo "private$(wc -l < "$dir/wg.log" | tr -d ' ')" ;;
   pubkey) sed 's/^private/public/' ;;
+  set)
+    if [ "$3" = listen-port ]; then
+      [ "$4" = "$(cat "$dir/busy-port" 2>/dev/null)" ] && exit 1
+      echo "$4" > "$dir/listen-port"
+    fi ;;
   show)
     case $3 in
       public-key) echo 'hubpublic' ;;

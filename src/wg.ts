@@ -24,6 +24,23 @@ export function hubPort() {
   return Number(run('wg', ['show', 'postern0', 'listen-port']))
 }
 
+// The hub takes the port for a moment and gives it back, as another service may hold it.
+export function hubPortFree(port: number) {
+  const hub = hubPort()
+  try {
+    run('wg', ['set', 'postern0', 'listen-port', String(port)])
+  } catch {
+    return false
+  }
+  run('wg', ['set', 'postern0', 'listen-port', String(hub)])
+  return true
+}
+
+export function setHubPort(port: number) {
+  run('wg', ['set', 'postern0', 'listen-port', String(port)])
+  run('wg-quick', ['save', 'postern0'])
+}
+
 export function handshakes() {
   const lines = run('wg', ['show', 'postern0', 'latest-handshakes']).split('\n').filter(Boolean)
   return new Map(lines.map((line) => {
