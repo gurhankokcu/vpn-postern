@@ -18,7 +18,7 @@ beforeEach(() => {
 
 test('ssh runs the command as root on the node with the hub key and stdin', async () => {
   await ssh(node, 'cat > /tmp/file', 'hello\n')
-  assert.equal(readFileSync(join(dir, 'ssh.log'), 'utf8'), `ssh -i ${dir}/id_ed25519 -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=${dir}/known_hosts -o HashKnownHosts=no -o ConnectTimeout=10 root@10.99.0.2 cat > /tmp/file
+  assert.equal(readFileSync(join(dir, 'ssh.log'), 'utf8'), `ssh -i ${dir}/id_ed25519 -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=${dir}/known_hosts -o HashKnownHosts=no -o ControlMaster=auto -o ControlPath=${dir}/ssh-10.99.0.2 -o ControlPersist=10m -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ConnectTimeout=10 root@10.99.0.2 cat > /tmp/file
 hello
 `)
 })
@@ -45,6 +45,14 @@ test('forget drops only the node\'s host keys', () => {
   writeFileSync(join(dir, 'known_hosts'), '10.99.0.2 ssh-ed25519 AAAAold\n10.99.0.20 ssh-ed25519 AAAAother\n10.99.0.2 ecdsa-sha2-nistp256 AAAAold\n')
   forget(node)
   assert.equal(readFileSync(join(dir, 'known_hosts'), 'utf8'), '10.99.0.20 ssh-ed25519 AAAAother\n')
+})
+
+test('forget closes only the node\'s shared connection', () => {
+  writeFileSync(join(dir, 'ssh-10.99.0.2'), '')
+  writeFileSync(join(dir, 'ssh-10.99.0.20'), '')
+  forget(node)
+  assert.equal(existsSync(join(dir, 'ssh-10.99.0.2')), false)
+  assert.equal(existsSync(join(dir, 'ssh-10.99.0.20')), true)
 })
 
 test('forget does nothing before the hub has met any node', () => {

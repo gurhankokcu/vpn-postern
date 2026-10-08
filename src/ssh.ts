@@ -1,10 +1,16 @@
 import { execFile } from 'node:child_process'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { address, dir, type Node } from './data.ts'
 
 const knownHosts = join(dir, 'known_hosts')
 
+function control(node: Node) {
+  return join(dir, `ssh-${address(node)}`)
+}
+
+// Calls to a node share one connection, open until 10 minutes after the last,
+// so only the first pays for the handshake. A node that drops takes it down within 10 seconds.
 // Given seconds, the whole call gives up after them, not only the connecting.
 export function ssh(node: Node, command: string, input = '', seconds?: number) {
   const args = [
@@ -13,6 +19,11 @@ export function ssh(node: Node, command: string, input = '', seconds?: number) {
     '-o', 'StrictHostKeyChecking=accept-new',
     '-o', `UserKnownHostsFile=${knownHosts}`,
     '-o', 'HashKnownHosts=no',
+    '-o', 'ControlMaster=auto',
+    '-o', `ControlPath=${control(node)}`,
+    '-o', 'ControlPersist=10m',
+    '-o', 'ServerAliveInterval=5',
+    '-o', 'ServerAliveCountMax=2',
     '-o', `ConnectTimeout=${seconds ?? 10}`,
     `root@${address(node)}`,
     command,
@@ -25,8 +36,10 @@ export function ssh(node: Node, command: string, input = '', seconds?: number) {
   })
 }
 
-// A removed node's number goes to the next node added, which has a different host key.
+// A removed node's number goes to the next node added, which has a different host key
+// and needs a connection of its own.
 export function forget(node: Node) {
+  rmSync(control(node), { force: true })
   if (!existsSync(knownHosts)) {
     return
   }
