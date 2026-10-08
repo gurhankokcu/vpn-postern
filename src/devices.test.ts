@@ -7,7 +7,7 @@ import { beforeEach, test } from 'node:test'
 
 process.env.POSTERN_DIR = mkdtempSync(join(tmpdir(), 'postern-'))
 process.env.PATH = `${join(import.meta.dirname, '..', 'dev', 'bin')}:${process.env.PATH}`
-const { addDevice, addScript, clientConf, devices, freeX, listDevices, movePort, peer, portScript, qr, removeDevice, removeScript, showDevice, withoutDevice } = await import('./devices.ts')
+const { addDevice, addScript, clientConf, devices, freeX, listDevices, movePort, peer, portScript, qr, removeDevice, removeScript, renameDevice, renameScript, showDevice, withName, withoutDevice } = await import('./devices.ts')
 const dir = process.env.POSTERN_DIR
 const node = { name: 'home', n: 2, port: 443, publicKey: 'key' }
 
@@ -162,6 +162,30 @@ wg-quick strip wg0 | wg syncconf wg0 /dev/stdin
 `)
 })
 
+test('withName changes only the device\'s name line, leaving the rest byte for byte', () => {
+  assert.equal(withName(twoDevices, 'mum', 'Mum-Phone'), twoDevices.replace('### Client mum\n', '### Client Mum-Phone\n'))
+})
+
+test('withName is null for a name with no block, in any other case too', () => {
+  assert.equal(withName(twoDevices, 'tablet', 'laptop'), null)
+  assert.equal(withName(twoDevices, 'MUM', 'laptop'), null)
+})
+
+test('renameScript is valid sh that writes wg0.conf privately and moves the device\'s config, if it has one', () => {
+  const script = renameScript('mum', 'Mum-Phone', 'WG0\n')
+  execFileSync('sh', ['-n'], { input: script })
+  assert.equal(script, `set -eu
+umask 077
+cat > /etc/wireguard/wg0.conf.tmp <<'EOF'
+WG0
+EOF
+mv /etc/wireguard/wg0.conf.tmp /etc/wireguard/wg0.conf
+if [ -f /etc/wireguard/clients/mum.conf ]; then
+  mv /etc/wireguard/clients/mum.conf /etc/wireguard/clients/Mum-Phone.conf
+fi
+`)
+})
+
 test('portScript is valid sh that moves the Endpoint port in every client config', () => {
   const script = portScript(443)
   execFileSync('sh', ['-n'], { input: script })
@@ -241,6 +265,47 @@ test('removeDevice is offline when the node cannot be reached', async () => {
 test('removeDevice waits for an add on the same node', async () => {
   answer(twoDevices)
   await Promise.all([addDevice(node, 'tablet', 'hub.example'), removeDevice(node, 'mum')])
+  assert.deepEqual(sshLog().match(/^ssh .* (cat \/etc\/wireguard\/wg0\.conf|sh)$/gm)?.map((line) => line.split(' ').at(-1)), ['/etc/wireguard/wg0.conf', 'sh', '/etc/wireguard/wg0.conf', 'sh'])
+})
+
+test('renameDevice writes wg0.conf with the new name to the node', async () => {
+  answer(twoDevices)
+  assert.equal(await renameDevice(node, 'mum', 'Mum-Phone'), 'renamed')
+  const [, write] = sshLog().split(/^ssh .*root@10\.99\.0\.2 sh\n/m)
+  assert.equal(write, renameScript('mum', 'Mum-Phone', withName(twoDevices, 'mum', 'Mum-Phone')!))
+})
+
+test('renameDevice keeping the same name only reads the node', async () => {
+  answer(twoDevices)
+  assert.equal(await renameDevice(node, 'mum', 'mum'), 'renamed')
+  assert.equal(sshLog().match(/^ssh /gm)?.length, 1)
+})
+
+test('renameDevice lets a device change only the case of its own name', async () => {
+  answer(twoDevices)
+  assert.equal(await renameDevice(node, 'mum', 'MUM'), 'renamed')
+})
+
+test('renameDevice refuses a name another device on the node has, in any case, writing nothing', async () => {
+  answer(twoDevices)
+  assert.equal(await renameDevice(node, 'mum', 'dad-phone'), 'taken')
+  assert.equal(sshLog().match(/^ssh /gm)?.length, 1)
+})
+
+test('renameDevice is missing for a device not on the node, writing nothing', async () => {
+  answer(twoDevices)
+  assert.equal(await renameDevice(node, 'tablet', 'laptop'), 'missing')
+  assert.equal(sshLog().match(/^ssh /gm)?.length, 1)
+})
+
+test('renameDevice is offline when the node cannot be reached', async () => {
+  answer('', 255)
+  assert.equal(await renameDevice(node, 'mum', 'Mum-Phone'), 'offline')
+})
+
+test('renameDevice waits for an add on the same node', async () => {
+  answer(twoDevices)
+  await Promise.all([addDevice(node, 'tablet', 'hub.example'), renameDevice(node, 'mum', 'Mum-Phone')])
   assert.deepEqual(sshLog().match(/^ssh .* (cat \/etc\/wireguard\/wg0\.conf|sh)$/gm)?.map((line) => line.split(' ').at(-1)), ['/etc/wireguard/wg0.conf', 'sh', '/etc/wireguard/wg0.conf', 'sh'])
 })
 

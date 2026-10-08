@@ -68,6 +68,15 @@ export function withoutDevice(conf: string, name: string) {
   return [...lines.slice(0, from), ...lines.slice(end)].join('\n')
 }
 
+export function withName(conf: string, from: string, to: string) {
+  const lines = conf.split('\n')
+  const start = lines.indexOf(`### Client ${from}`)
+  if (start === -1) {
+    return null
+  }
+  return lines.with(start, `### Client ${to}`).join('\n')
+}
+
 // Each file lands whole through a rename, and syncconf applies the peers without
 // dropping devices already connected.
 export function addScript(name: string, conf: string, client: string) {
@@ -92,6 +101,18 @@ ${conf}EOF
 mv ${server}.tmp ${server}
 rm -f ${clients}/${name}.conf
 wg-quick strip wg0 | wg syncconf wg0 /dev/stdin
+`
+}
+
+export function renameScript(from: string, to: string, conf: string) {
+  return `set -eu
+umask 077
+cat > ${server}.tmp <<'EOF'
+${conf}EOF
+mv ${server}.tmp ${server}
+if [ -f ${clients}/${from}.conf ]; then
+  mv ${clients}/${from}.conf ${clients}/${to}.conf
+fi
 `
 }
 
@@ -170,6 +191,29 @@ async function remove(node: Node, name: string) {
   }
   const write = await ssh(node, 'sh', removeScript(name, conf))
   return write.code === 0 ? 'removed' : 'offline'
+}
+
+export function renameDevice(node: Node, from: string, to: string) {
+  return queued(node, () => rename(node, from, to))
+}
+
+async function rename(node: Node, from: string, to: string) {
+  const read = await ssh(node, `cat ${server}`)
+  if (read.code !== 0) {
+    return 'offline'
+  }
+  const conf = withName(read.stdout, from, to)
+  if (conf === null) {
+    return 'missing'
+  }
+  if (to === from) {
+    return 'renamed'
+  }
+  if (devices(read.stdout).some((device) => device.name !== from && device.name.toLowerCase() === to.toLowerCase())) {
+    return 'taken'
+  }
+  const write = await ssh(node, 'sh', renameScript(from, to, conf))
+  return write.code === 0 ? 'renamed' : 'offline'
 }
 
 export function movePort(node: Node, port: number) {

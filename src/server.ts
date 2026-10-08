@@ -5,11 +5,11 @@ import { createServer } from 'node:https'
 import { join } from 'node:path'
 import { clear, expiredCookie, fail, locked, sessionCookie, valid, verify } from './auth.ts'
 import { dir, live, load, type Node } from './data.ts'
-import { addDevice, listDevices, qr, removeDevice, showDevice } from './devices.ts'
+import { addDevice, listDevices, qr, removeDevice, renameDevice, showDevice } from './devices.ts'
 import { field, fields } from './fields.ts'
 import { joinScript } from './join.ts'
 import { addNode, changeHubPort, changePort, dropJoin, findJoin, nextPort, offlineNodes, removeNode, renameNode, unjoined } from './nodes.ts'
-import { addDeviceModal, addNodeModal, deviceModal, hubPortModal, joinModal, loginPage, nameModal, notFoundPage, portModal, treePage } from './pages.ts'
+import { addDeviceModal, addNodeModal, deviceModal, deviceNameModal, hubPortModal, joinModal, loginPage, nameModal, notFoundPage, portModal, treePage } from './pages.ts'
 import { hubKey, hubPort, online } from './wg.ts'
 
 const css = readFileSync(join(import.meta.dirname, 'style.css'))
@@ -238,6 +238,32 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
       return again(503, `${adding.name} is offline.`)
     }
     return redirect(res, `/nodes/${adding.n}/devices/${name}`)
+  }
+  const [, nameDeviceN, current = ''] = route.match(/^GET \/nodes\/(\d+)\/devices\/([^/]+)\/name$/) ?? []
+  const namingDevice = fields.name.test(current) ? findNode(nameDeviceN) : undefined
+  if (namingDevice) {
+    return send(res, 200, await tree(deviceNameModal(namingDevice, current)))
+  }
+  const [, renameDeviceN, from = ''] = route.match(/^POST \/nodes\/(\d+)\/devices\/([^/]+)\/name$/) ?? []
+  const renamingDevice = fields.name.test(from) ? findNode(renameDeviceN) : undefined
+  if (renamingDevice) {
+    const params = await form(req)
+    const name = field(params, 'name')
+    const again = async (status: number, message: string) => send(res, status, await tree(deviceNameModal(renamingDevice, from, message, params.get('name') ?? '')))
+    if (name === null) {
+      return again(400, 'A device name is 1 to 32 letters, digits, - or _.')
+    }
+    const result = await renameDevice(renamingDevice, from, name)
+    if (result === 'missing') {
+      return send(res, 404, notFoundPage())
+    }
+    if (result === 'taken') {
+      return again(409, 'Another device on this node already has that name.')
+    }
+    if (result === 'offline') {
+      return again(503, `${renamingDevice.name} is offline.`)
+    }
+    return redirect(res, '/')
   }
   const [, removeN, removeName = ''] = route.match(/^POST \/nodes\/(\d+)\/devices\/([^/]+)\/remove$/) ?? []
   const removing = fields.name.test(removeName) ? findNode(removeN) : undefined

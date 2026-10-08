@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import type { TreeView } from './pages.ts'
 
 process.env.POSTERN_DIR = mkdtempSync(join(tmpdir(), 'postern-'))
-const { addDeviceModal, addNodeModal, deviceModal, hubPortModal, joinModal, loginPage, nameModal, notFoundPage, portModal, treePage } = await import('./pages.ts')
+const { addDeviceModal, addNodeModal, deviceModal, deviceNameModal, hubPortModal, joinModal, loginPage, nameModal, notFoundPage, portModal, treePage } = await import('./pages.ts')
 
 const home = { name: 'home', n: 2, port: 51822, publicKey: 'home' }
 const work = { name: 'work', n: 3, port: 443, publicKey: 'work' }
@@ -64,7 +64,7 @@ test('a node shows its status, address and port; an online one, its devices and 
   assert.match(row, /<i class="guide tee"><\/i><span class="label"><i class="dot online" role="img" aria-label="online"><\/i><b>home<\/b>/)
   assert.match(row, /<td class="mono address">10\.99\.0\.2<\/td>\n<td class="mono port"><span class="value">51822<a class="btn ghost act" href="\/nodes\/2\/port" aria-label="Change port">/)
   assert.match(row, /<a class="btn ghost act" href="\/nodes\/2\/new-device" aria-label="Add device">/)
-  assert.match(rowOf(html, 'laptop'), /<i class="guide pass"><\/i><i class="guide tee"><\/i><span class="label"><i class="dot online" role="img" aria-label="online"><\/i><b>laptop<\/b><\/span><\/div><\/td>\n<td class="mono address">10\.66\.66\.2<\/td>/)
+  assert.match(rowOf(html, 'laptop'), /<i class="guide pass"><\/i><i class="guide tee"><\/i><span class="label"><i class="dot online" role="img" aria-label="online"><\/i><b>laptop<\/b><a class="btn ghost act" href="\/nodes\/2\/devices\/laptop\/name" aria-label="Rename"><svg [\s\S]*?<\/svg><\/a><\/span><\/div><\/td>\n<td class="mono address">10\.66\.66\.2<\/td>/)
   assert.match(rowOf(html, 'tablet'), /<i class="guide pass"><\/i><i class="guide elbow"><\/i><span class="label"><i class="dot offline" role="img" aria-label="offline"><\/i><b>tablet<\/b>/)
 })
 
@@ -181,6 +181,23 @@ test('renaming a node shows its message and what was typed, escaped', () => {
   assert.match(html, /<div class="note">Taken\.<\/div>/)
   assert.match(html, /name="name" value="a&#34;b"/)
   assert.match(html, /<h2 id="modal-title">Rename &#60;b&#62;<\/h2>/)
+})
+
+test('renaming a device asks for its name, prefilled, posting to it, and says the app keeps its own', () => {
+  const html = deviceNameModal(home, 'laptop')
+  assert.match(html, /<h2 id="modal-title">Rename laptop <span class="pill">home<\/span><\/h2>/)
+  assert.match(html, /<form class="form" method="post" action="\/nodes\/2\/devices\/laptop\/name">/)
+  assert.match(html, /<input name="name" value="laptop" autocomplete="off" autofocus required><\/span><small>1 to 32 letters, digits, - or _\. No spaces\.<\/small>/)
+  assert.match(html, /<div class="warn">The WireGuard app on the device keeps its own name for this tunnel\.<\/div>/)
+  assert.match(html, /<a class="btn ghost" href="\/">Cancel<\/a><button class="btn primary">Save name<\/button>/)
+  assert.doesNotMatch(html, /class="note"/)
+})
+
+test('renaming a device shows its message and what was typed, escaped', () => {
+  const html = deviceNameModal({ ...home, name: '<b>' }, 'laptop', 'Taken.', 'a"b')
+  assert.match(html, /<div class="note">Taken\.<\/div>/)
+  assert.match(html, /name="name" value="a&#34;b"/)
+  assert.match(html, /<span class="pill">&#60;b&#62;<\/span>/)
 })
 
 test('changing a port asks for it, prefilled, posting to its node', () => {

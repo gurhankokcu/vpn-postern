@@ -13,7 +13,7 @@ before(async () => {
 test('the tablet adds the phone to home-pi and gets its QR code', async () => {
   const { n } = await node('home-pi')
   assert.equal(await post(`/nodes/${n}/devices`, cookie, 'name=phone'), 303)
-  assert.match(await row(cookie, 'phone'), /<b>phone<\/b><\/span><\/div><\/td>\n<td class="mono address">10\.66\.66\.\d+<\/td>/)
+  assert.match(await row(cookie, 'phone'), /<b>phone<\/b><a class="btn ghost act" href="\/nodes\/\d+\/devices\/phone\/name" aria-label="Rename"><svg [\s\S]*?<\/svg><\/a><\/span><\/div><\/td>\n<td class="mono address">10\.66\.66\.\d+<\/td>/)
   assert.match(await page(`/nodes/${n}/devices/phone`, cookie), /<div class="qr"><svg /)
 })
 

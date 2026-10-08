@@ -123,6 +123,30 @@ test('the hub\'s pencil opens its port modal, focused on Port, and a node\'s por
   assert.equal(await page.inputValue('input[name="port"]'), port)
 })
 
+test('a node\'s name pencil opens its rename modal, focused on Name, and a name with a space comes back in it', async () => {
+  await page.goto(`${hub}/`)
+  await row('home-pi').locator('a[aria-label="Rename"]').click()
+  await page.waitForURL(`${hub}/nodes/${n}/name`)
+  assert.equal(await page.evaluate('document.activeElement.name'), 'name')
+  assert.equal(await page.inputValue('input[name="name"]'), 'home-pi')
+  await page.fill('input[name="name"]', 'London Pi')
+  await page.click('dialog button:text-is("Save name")')
+  await page.waitForSelector('dialog .note:text-is("A node name is 1 to 32 letters, digits, - or _.")')
+  assert.equal(await page.inputValue('input[name="name"]'), 'London Pi')
+})
+
+test('a device\'s name pencil opens its rename modal, focused on Name, and a name with a space comes back in it', async () => {
+  await page.goto(`${hub}/`)
+  await row('laptop').locator('a[aria-label="Rename"]').click()
+  await page.waitForURL(`${hub}/nodes/${n}/devices/laptop/name`)
+  assert.equal(await page.evaluate('document.activeElement.name'), 'name')
+  assert.equal(await page.inputValue('input[name="name"]'), 'laptop')
+  await page.fill('input[name="name"]', 'my laptop')
+  await page.click('dialog button:text-is("Save name")')
+  await page.waitForSelector('dialog .note:text-is("A device name is 1 to 32 letters, digits, - or _.")')
+  assert.equal(await page.inputValue('input[name="name"]'), 'my laptop')
+})
+
 test('a pencil\'s hover label sits above it, inside the window', async () => {
   await page.goto(`${hub}/`)
   for (const button of [page.locator('tr.hub a[aria-label="Change port"]'), row('home-pi').locator('a[aria-label="Change port"]')]) {

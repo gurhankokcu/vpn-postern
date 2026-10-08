@@ -208,7 +208,7 @@ test('an online node is asked for its devices, waiting 3 seconds at most', async
   answer(wg0)
   const html = await page('/')
   assert.match(html, /<i class="dot online" role="img" aria-label="online"><\/i><b>home<\/b>/)
-  assert.match(html, /<b>mum<\/b><\/span><\/div><\/td>\n<td class="mono address">10\.66\.66\.2<\/td>/)
+  assert.match(html, /<b>mum<\/b><a class="btn ghost act" href="\/nodes\/1\/devices\/mum\/name" aria-label="Rename"><svg [\s\S]*?<\/svg><\/a><\/span><\/div><\/td>\n<td class="mono address">10\.66\.66\.2<\/td>/)
   assert.match(readFileSync(join(dir, 'ssh.log'), 'utf8'), /-o ConnectTimeout=3 root@10\.99\.0\.1 cat \/etc\/wireguard\/wg0\.conf/)
 })
 
@@ -487,6 +487,72 @@ test('removing an unknown device, or one on an unknown node, is not found', asyn
   const cookie = await session()
   for (const path of ['/nodes/1/devices/tablet/remove', '/nodes/9/devices/mum/remove', '/nodes/1/devices/mum%20phone/remove', '/nodes/1/devices//remove']) {
     const res = await request(path, { method: 'POST', headers: { cookie } })
+    assert.equal(res.status, 404, path)
+    assert.match(await res.text(), /<h3>Not found<\/h3>/)
+  }
+})
+
+function renameDevice(cookie: string, body: string, path = '/nodes/1/devices/mum/name') {
+  return request(path, {
+    method: 'POST',
+    headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' },
+    body,
+  })
+}
+
+test('renaming a device opens over the tree, prefilled', async () => {
+  const html = await page('/nodes/1/devices/mum/name')
+  assert.match(html, /<h2 id="modal-title">Rename mum <span class="pill">home<\/span><\/h2>/)
+  assert.match(html, /<input name="name" value="mum"/)
+})
+
+test('renaming a device writes its new name to the node and goes back to the tree', async () => {
+  answer(wg0)
+  const res = await renameDevice(await session(), 'name=Mum-Phone')
+  assert.equal(res.status, 303)
+  assert.equal(res.headers.get('location'), '/')
+  const log = readFileSync(join(dir, 'ssh.log'), 'utf8')
+  assert.match(log, /^### Client Mum-Phone$/m)
+  assert.match(log, /^  mv \/etc\/wireguard\/clients\/mum\.conf \/etc\/wireguard\/clients\/Mum-Phone\.conf$/m)
+})
+
+test('a new device name against the rule is refused with a note, reaching no node', async () => {
+  const cookie = await session()
+  for (const [body, typed] of [['', ''], ['name=mum%20phone', 'mum phone'], ['name=..%2Fmum', '../mum']]) {
+    answer(wg0)
+    const res = await renameDevice(cookie, body)
+    assert.equal(res.status, 400, body)
+    const html = await res.text()
+    assert.match(html, /<div class="note">A device name is 1 to 32 letters, digits, - or _\.<\/div>/)
+    assert.ok(html.includes(`<input name="name" value="${typed}"`), body)
+    assert.equal(existsSync(join(dir, 'ssh.log')), false)
+  }
+})
+
+test('a device name another device on the node has is refused with a note', async () => {
+  answer(`${wg0}\n### Client dad\n[Peer]\nPublicKey = dadpublic\nAllowedIPs = 10.66.66.3/32\n`)
+  const res = await renameDevice(await session(), 'name=DAD')
+  assert.equal(res.status, 409)
+  const html = await res.text()
+  assert.match(html, /<div class="note">Another device on this node already has that name\.<\/div>/)
+  assert.match(html, /<input name="name" value="DAD"/)
+})
+
+test('renaming a device on an offline node says so in its form, trying it only once', async () => {
+  answer('', 255)
+  const res = await renameDevice(await session(), 'name=Mum-Phone')
+  assert.equal(res.status, 503)
+  const html = await res.text()
+  assert.match(html, /<div class="note">home is offline\.<\/div>/)
+  assert.match(html, /<input name="name" value="Mum-Phone"/)
+  assert.equal(readFileSync(join(dir, 'ssh.log'), 'utf8').match(/^ssh /gm)?.length, 1)
+})
+
+test('renaming an unknown device, or one on an unknown node, is not found', async () => {
+  answer(wg0)
+  const cookie = await session()
+  for (const path of ['/nodes/1/devices/tablet/name', '/nodes/9/devices/mum/name', '/nodes/1/devices/mum%20phone/name', '/nodes/1/devices//name']) {
+    const res = await renameDevice(cookie, 'name=laptop', path)
     assert.equal(res.status, 404, path)
     assert.match(await res.text(), /<h3>Not found<\/h3>/)
   }
