@@ -27,7 +27,7 @@ button, input { font: inherit; color: inherit; }
 table { border-collapse: collapse; width: 100%; }
 
 body {
-  min-height: 100vh;
+  min-height: 100dvh;
   background:
     radial-gradient(1100px 520px at 84% -12%, #0f2f3d 0%, transparent 60%),
     radial-gradient(900px 460px at 8% -8%, #0d2b3a 0%, transparent 58%),
