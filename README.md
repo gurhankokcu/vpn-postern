@@ -57,3 +57,7 @@ npm run e2e  # end to end, in the simulation
 ```
 
 The last e2e file drives the UI in the installed Google Chrome, headless.
+
+## License
+
+[MIT](LICENSE)
