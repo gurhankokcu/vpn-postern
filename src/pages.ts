@@ -145,7 +145,7 @@ export function treePage({ hubPort, nodes, joins, devices, message = '', modal =
     list?.forEach((device, j) => {
       const href = `/nodes/${node.n}/devices/${encodeURIComponent(device.name)}`
       const acts = link(href, 'Show', 'show') + removeButton(`${href}/remove`, `Remove ${device.name}? It stops connecting until you add it again and scan its new QR code.`)
-      rows.push(row('', [pass, j === list.length - 1 ? 'elbow' : 'tee'], `<b>${escapeHtml(device.name)}</b>`, `10.66.66.${device.x}`, '', acts))
+      rows.push(row('', [pass, j === list.length - 1 ? 'elbow' : 'tee'], `${dot(device.online ? 'online' : 'offline')}<b>${escapeHtml(device.name)}</b>`, `10.66.66.${device.x}`, '', acts))
     })
   })
 

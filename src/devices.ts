@@ -1,21 +1,23 @@
 import { execFileSync } from 'node:child_process'
 import type { Node } from './data.ts'
 import { ssh } from './ssh.ts'
-import { keypair, publicKey } from './wg.ts'
+import { keypair, latestHandshakes, publicKey, recent } from './wg.ts'
 
-export type Device = { name: string; x: number }
+export type Device = { name: string; x: number; online: boolean }
 
 const server = '/etc/wireguard/wg0.conf'
 const clients = '/etc/wireguard/clients'
 const queues = new Map<number, Promise<unknown>>()
+const mark = '### Handshakes'
 
 // wireguard-install, whose wg0.conf a node may keep, lists an IPv6 address after it.
 const address = /^AllowedIPs = (?:.*[ ,])?10\.66\.66\.(\d+)\/32(?:,.*)?$/m
 
-export function devices(conf: string): Device[] {
+export function devices(conf: string, seen = new Map<string, number>()): Device[] {
   return conf.split(/^### Client /m).slice(1).map((block) => ({
     name: block.split('\n')[0],
     x: Number(block.match(address)?.[1]),
+    online: recent(seen.get(block.match(/^PublicKey = (.+)$/m)?.[1] ?? '')),
   }))
 }
 
@@ -114,8 +116,12 @@ export function qr(text: string) {
 
 // The page waits on every online node, so a node that has only just dropped gets 3 seconds.
 export async function listDevices(node: Node) {
-  const { stdout, code } = await ssh(node, `cat ${server}`, '', 3)
-  return code === 0 ? devices(stdout) : null
+  const { stdout, code } = await ssh(node, `cat ${server} && echo '${mark}' && wg show wg0 latest-handshakes`, '', 3)
+  if (code !== 0) {
+    return null
+  }
+  const [conf, seen = ''] = stdout.split(`${mark}\n`)
+  return devices(conf, latestHandshakes(seen))
 }
 
 // Changes to a node run one at a time, so each reads the wg0.conf the last one wrote.

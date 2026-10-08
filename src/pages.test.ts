@@ -14,7 +14,7 @@ const empty: TreeView = { hubPort: 51820, nodes: [], joins: [], devices: new Map
 const both: TreeView = {
   ...empty,
   nodes: [home, work],
-  devices: new Map([[2, [{ name: 'laptop', x: 2 }, { name: 'tablet', x: 3 }]], [3, null]]),
+  devices: new Map([[2, [{ name: 'laptop', x: 2, online: true }, { name: 'tablet', x: 3, online: false }]], [3, null]]),
 }
 
 function rowOf(html: string, name: string) {
@@ -64,8 +64,8 @@ test('a node shows its status, address and port; an online one, its devices and 
   assert.match(row, /<i class="guide tee"><\/i><span class="label"><i class="dot online" role="img" aria-label="online"><\/i><b>home<\/b>/)
   assert.match(row, /<td class="mono address">10\.99\.0\.2<\/td>\n<td class="mono port"><span class="value">51822<a class="btn ghost act" href="\/nodes\/2\/port" aria-label="Change port">/)
   assert.match(row, /<a class="btn ghost act" href="\/nodes\/2\/new-device" aria-label="Add device">/)
-  assert.match(rowOf(html, 'laptop'), /<i class="guide pass"><\/i><i class="guide tee"><\/i><span class="label"><b>laptop<\/b><\/span><\/div><\/td>\n<td class="mono address">10\.66\.66\.2<\/td>/)
-  assert.match(rowOf(html, 'tablet'), /<i class="guide pass"><\/i><i class="guide elbow"><\/i>/)
+  assert.match(rowOf(html, 'laptop'), /<i class="guide pass"><\/i><i class="guide tee"><\/i><span class="label"><i class="dot online" role="img" aria-label="online"><\/i><b>laptop<\/b><\/span><\/div><\/td>\n<td class="mono address">10\.66\.66\.2<\/td>/)
+  assert.match(rowOf(html, 'tablet'), /<i class="guide pass"><\/i><i class="guide elbow"><\/i><span class="label"><i class="dot offline" role="img" aria-label="offline"><\/i><b>tablet<\/b>/)
 })
 
 test('a device can be shown and removed, asking first', () => {
@@ -95,8 +95,8 @@ test('an online node without devices says so', () => {
 
 test('removing a node asks first, naming how many devices lose their connection', () => {
   const ask = (devices: TreeView['devices']) => rowOf(treePage({ ...both, devices }), 'home').match(/data-confirm="([^"]*)"/)?.[1]
-  assert.equal(ask(new Map([[2, [{ name: 'a', x: 2 }, { name: 'b', x: 3 }]]])), 'Remove home? It and its 2 devices lose their connection.')
-  assert.equal(ask(new Map([[2, [{ name: 'a', x: 2 }]]])), 'Remove home? It and its 1 device lose their connection.')
+  assert.equal(ask(new Map([[2, [{ name: 'a', x: 2, online: false }, { name: 'b', x: 3, online: false }]]])), 'Remove home? It and its 2 devices lose their connection.')
+  assert.equal(ask(new Map([[2, [{ name: 'a', x: 2, online: false }]]])), 'Remove home? It and its 1 device lose their connection.')
   assert.equal(ask(new Map([[2, []]])), 'Remove home? It loses its connection.')
   assert.equal(ask(new Map([[2, null]])), 'Remove home? It and its devices lose their connection.')
   assert.match(rowOf(treePage(both), 'home'), /<form method="post" action="\/nodes\/2\/remove" data-confirm=/)
@@ -104,7 +104,7 @@ test('removing a node asks first, naming how many devices lose their connection'
 
 test('the tree escapes node and device names', () => {
   const evil = `<i>"&'`
-  const html = treePage({ ...both, nodes: [{ ...home, name: evil }], devices: new Map([[2, [{ name: evil, x: 2 }]]]) })
+  const html = treePage({ ...both, nodes: [{ ...home, name: evil }], devices: new Map([[2, [{ name: evil, x: 2, online: false }]]]) })
   assert.match(html, /<b>&#60;i&#62;&#34;&#38;&#39;<\/b>/)
   assert.match(html, /data-confirm="Remove &#60;i&#62;&#34;&#38;&#39;\? It and its 1 device/)
   assert.doesNotMatch(html, /<i>"/)
@@ -170,7 +170,7 @@ test('changing a port asks for it, prefilled, posting to its node', () => {
 })
 
 test('changing the port of a node with devices reminds to update their configs', () => {
-  assert.match(portModal(home, [{ name: 'laptop', x: 2 }]), /<div class="warn">Don't forget to update the config on home's devices\.<\/div>/)
+  assert.match(portModal(home, [{ name: 'laptop', x: 2, online: false }]), /<div class="warn">Don't forget to update the config on home's devices\.<\/div>/)
 })
 
 test('changing a port shows its message and what was typed, escaped', () => {

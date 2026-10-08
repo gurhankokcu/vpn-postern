@@ -48,7 +48,12 @@ function sshLog() {
 }
 
 test('devices reads each client block\'s name and address', () => {
-  assert.deepEqual(devices(twoDevices), [{ name: 'mum', x: 2 }, { name: 'Dad-Phone', x: 4 }])
+  assert.deepEqual(devices(twoDevices), [{ name: 'mum', x: 2, online: false }, { name: 'Dad-Phone', x: 4, online: false }])
+})
+
+test('a device is online when it has shaken hands with the node in the last 3 minutes', () => {
+  const seen = new Map([['mumpublic', Date.now() - 60_000], ['dadpublic', Date.now() - 240_000]])
+  assert.deepEqual(devices(twoDevices, seen).map((device) => device.online), [true, false])
 })
 
 test('a wg0.conf with no client blocks has no devices', () => {
@@ -63,7 +68,7 @@ test('freeX is the lowest address from 2 that no peer holds', () => {
 
 test('an address is read from a list with an IPv6 address, as wireguard-install writes', () => {
   const conf = `${server}\n### Client mum\n[Peer]\nPublicKey = mumpublic\nAllowedIPs = 10.66.66.2/32,fd42:42:42::2/128\n\n[Peer]\nAllowedIPs = fd42:42:42::4/128, 10.66.66.3/32\n`
-  assert.deepEqual(devices(conf), [{ name: 'mum', x: 2 }])
+  assert.deepEqual(devices(conf), [{ name: 'mum', x: 2, online: false }])
   assert.equal(freeX(conf), 4)
 })
 
@@ -78,7 +83,7 @@ test('peer is a client block, set apart by a blank line', () => {
 PublicKey = mumpublic
 AllowedIPs = 10.66.66.2/32
 `)
-  assert.deepEqual(devices(server + peer('mum', 'mumpublic', 2)), [{ name: 'mum', x: 2 }])
+  assert.deepEqual(devices(server + peer('mum', 'mumpublic', 2)), [{ name: 'mum', x: 2, online: false }])
 })
 
 test('clientConf sends everything through the node, at the MTU that fits inside postern0', () => {
@@ -174,10 +179,10 @@ test('qr encodes the text as an svg, without the XML prolog', () => {
   assert.equal(readFileSync(join(dir, 'qrencode.log'), 'utf8'), 'qrencode -t svg -o -\nCLIENT\n')
 })
 
-test('listDevices reads wg0.conf on the node', async () => {
-  answer(twoDevices)
-  assert.deepEqual(await listDevices(node), [{ name: 'mum', x: 2 }, { name: 'Dad-Phone', x: 4 }])
-  assert.match(sshLog(), /root@10\.99\.0\.2 cat \/etc\/wireguard\/wg0\.conf\n$/)
+test('listDevices reads wg0.conf and the devices\' handshakes on the node', async () => {
+  answer(`${twoDevices}### Handshakes\nmumpublic\t${Math.floor(Date.now() / 1000)}\ndadpublic\t0\n`)
+  assert.deepEqual(await listDevices(node), [{ name: 'mum', x: 2, online: true }, { name: 'Dad-Phone', x: 4, online: false }])
+  assert.match(sshLog(), /root@10\.99\.0\.2 cat \/etc\/wireguard\/wg0\.conf && echo '### Handshakes' && wg show wg0 latest-handshakes\n$/)
 })
 
 test('listDevices is null when the node cannot be reached', async () => {

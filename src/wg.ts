@@ -41,18 +41,26 @@ export function setHubPort(port: number) {
   run('wg-quick', ['save', 'postern0'])
 }
 
-export function handshakes() {
-  const lines = run('wg', ['show', 'postern0', 'latest-handshakes']).split('\n').filter(Boolean)
+export function latestHandshakes(text: string) {
+  const lines = text.split('\n').filter(Boolean)
   return new Map(lines.map((line) => {
     const [publicKey, seconds] = line.split('\t')
     return [publicKey, Number(seconds) * 1000]
   }))
 }
 
-// A node is online when it has shaken hands with the hub in the last 3 minutes.
+export function handshakes() {
+  return latestHandshakes(run('wg', ['show', 'postern0', 'latest-handshakes']))
+}
+
+// A peer is online when it has shaken hands in the last 3 minutes.
+export function recent(handshake = 0) {
+  return Date.now() - handshake < onlineMs
+}
+
 export function online(nodes: Node[]) {
   const seen = handshakes()
-  return new Set(nodes.filter((node) => Date.now() - (seen.get(node.publicKey) ?? 0) < onlineMs).map((node) => node.n))
+  return new Set(nodes.filter((node) => recent(seen.get(node.publicKey))).map((node) => node.n))
 }
 
 export function addPeer(node: Node) {

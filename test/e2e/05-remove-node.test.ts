@@ -25,6 +25,7 @@ async function join() {
   assert.equal(code, 0, out)
   assert.equal((await sh('work-pi', 'ping -c 3 -W 5 10.99.0.1')).code, 0)
   assert.equal(await status(cookie, 'work-pi'), 'online')
+  assert.equal((await sh('hub', `test -S /var/lib/postern/ssh-10.99.0.${n}`)).code, 0)
 }
 
 async function wg0() {
@@ -35,6 +36,7 @@ async function remove() {
   assert.equal(await post(`/nodes/${n}/remove`, cookie, ''), 303)
   assert.equal(await node('work-pi'), undefined)
   assert.equal(await row(cookie, 'work-pi'), '')
+  assert.equal((await sh('hub', `test -e /var/lib/postern/ssh-10.99.0.${n}`)).code, 1)
   for (const peers of [await output('hub', 'wg show postern0 peers'), await output('hub', 'cat /etc/wireguard/postern0.conf')]) {
     assert.ok(!peers.includes(publicKey))
   }

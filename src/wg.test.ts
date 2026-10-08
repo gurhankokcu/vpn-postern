@@ -6,7 +6,7 @@ import { beforeEach, test } from 'node:test'
 
 process.env.POSTERN_DIR = mkdtempSync(join(tmpdir(), 'postern-'))
 process.env.PATH = `${join(import.meta.dirname, '..', 'dev', 'bin')}:${process.env.PATH}`
-const { handshakes, hubPort, hubPortFree, setHubPort } = await import('./wg.ts')
+const { handshakes, hubPort, hubPortFree, recent, setHubPort } = await import('./wg.ts')
 const file = join(process.env.POSTERN_DIR, 'handshakes')
 const dir = process.env.POSTERN_DIR
 
@@ -24,6 +24,12 @@ test('handshakes maps each peer key to its last handshake in ms', () => {
 
 test('handshakes is empty with no peers', () => {
   assert.deepEqual(handshakes(), new Map())
+})
+
+test('a handshake is recent within the last 3 minutes, and no handshake is not', () => {
+  assert.equal(recent(Date.now() - 170_000), true)
+  assert.equal(recent(Date.now() - 190_000), false)
+  assert.equal(recent(), false)
 })
 
 test('hubPort is the port postern0 listens on', () => {

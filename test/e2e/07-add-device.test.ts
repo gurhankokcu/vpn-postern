@@ -31,11 +31,13 @@ test('home-pi runs the phone as a peer, live and in its wg0.conf', async () => {
   assert.equal(await output('home-pi', 'stat -c %a /etc/wireguard/wg0.conf /etc/wireguard/clients/phone.conf'), '600\n600')
 })
 
-test('the phone, behind the carrier NAT, reaches home-pi\'s LAN and the internet from the home IP', async () => {
+test('the phone, behind the carrier NAT, reaches home-pi\'s LAN and the internet from the home IP, and shows online', async () => {
+  assert.equal(await status(cookie, 'phone'), 'offline')
   try {
     const setup = await connect('phone', conf)
     assert.equal(setup.code, 0, setup.out)
     assert.equal((await sh('phone', 'ping -c 3 -W 5 10.66.66.1')).code, 0)
+    assert.equal(await status(cookie, 'phone'), 'online')
     assert.deepEqual(JSON.parse(await output('phone', 'curl -s -m 5 http://192.168.1.30')), { server: 'camera', client: '192.168.1.10' })
     assert.deepEqual(JSON.parse(await output('phone', 'curl -s -m 5 http://example.com')), { server: 'example.com', client: '172.30.0.20' })
   } finally {
