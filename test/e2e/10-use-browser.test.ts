@@ -73,7 +73,7 @@ test('a modal opened from the tree is modal, keeps its address and focuses its N
   await page.waitForTimeout(200)
   assert.equal(path(), '/new-node')
   assert.equal(await page.evaluate('document.querySelector("dialog").matches(":modal")'), true)
-  assert.equal(await page.evaluate('document.activeElement.name'), 'nodeName')
+  assert.equal(await page.evaluate('document.activeElement.name'), 'name')
 })
 
 test('closing a modal puts the address back to the tree', async () => {
@@ -84,7 +84,7 @@ test('closing a modal puts the address back to the tree', async () => {
 
 test('add device focuses its Name', async () => {
   await page.goto(`${hub}/nodes/${n}/new-device`)
-  assert.equal(await page.evaluate('document.activeElement.name'), 'deviceName')
+  assert.equal(await page.evaluate('document.activeElement.name'), 'name')
 })
 
 test('a hover label sits above its button, inside the window', async () => {
@@ -180,13 +180,13 @@ test('a fourth click in a code box selects the whole box', async () => {
 test('a taken name comes back in the add node modal, and a new one opens its join command', async () => {
   await page.goto(`${hub}/`)
   await page.click('a[aria-label="Add node"]')
-  await page.fill('input[name="nodeName"]', 'HOME-PI')
+  await page.fill('input[name="name"]', 'HOME-PI')
   await page.click('dialog button:text-is("Add node")')
   await page.waitForSelector('dialog .note:text-is("Another node already has that name.")')
-  assert.equal(await page.inputValue('input[name="nodeName"]'), 'HOME-PI')
-  await page.fill('input[name="nodeName"]', 'Garden Pi')
+  assert.equal(await page.inputValue('input[name="name"]'), 'HOME-PI')
+  await page.fill('input[name="name"]', 'Garden-Pi')
   await page.click('dialog button:text-is("Add node")')
-  await page.waitForSelector('dialog h2:text-is("Join Garden Pi")')
+  await page.waitForSelector('dialog h2:text-is("Join Garden-Pi")')
   assert.match(path(), /^\/nodes\/\d+\/join$/)
   assert.match(await page.textContent('dialog pre') ?? '', /^curl -fsSk --pinnedpubkey sha256\/\/\S+ https:\/\/localhost:8443\/join\/\S+ \| sudo sh$/)
 })
@@ -194,7 +194,7 @@ test('a taken name comes back in the add node modal, and a new one opens its joi
 test('a device added from the tree shows its QR code, and closing it goes back to the tree', async () => {
   await page.goto(`${hub}/`)
   await row('home-pi').locator('a[aria-label="Add device"]').click()
-  await page.fill('input[name="deviceName"]', 'watch')
+  await page.fill('input[name="name"]', 'watch')
   await page.click('dialog button:text-is("Add device")')
   await page.waitForURL(`${hub}/nodes/${n}/devices/watch`)
   assert.equal(await page.locator('dialog .qr svg').count(), 1)
@@ -211,16 +211,16 @@ test('removing a device asks first, and goes only once the answer is yes', async
 })
 
 test('removing a node asks first, and goes only once the answer is yes', async () => {
-  assert.equal(await remove('Garden Pi', false), 'Remove Garden Pi? It and its devices lose their connection.')
-  assert.equal(await row('Garden Pi').count(), 1)
-  await remove('Garden Pi', true)
-  await row('Garden Pi').waitFor({ state: 'detached' })
+  assert.equal(await remove('Garden-Pi', false), 'Remove Garden-Pi? It and its devices lose their connection.')
+  assert.equal(await row('Garden-Pi').count(), 1)
+  await remove('Garden-Pi', true)
+  await row('Garden-Pi').waitFor({ state: 'detached' })
 })
 
 test('on a phone, a node with the longest name keeps its buttons inside the window', async () => {
-  const name = 'The Pi in the shed at the bottom'
+  const name = 'The-Pi-in-the-shed-at-the-bottom'
   await page.goto(`${hub}/new-node`)
-  await page.fill('input[name="nodeName"]', name)
+  await page.fill('input[name="name"]', name)
   await page.click('dialog button:text-is("Add node")')
   await page.waitForSelector(`dialog h2:text-is("Join ${name}")`)
   await page.setViewportSize({ width: 375, height: 740 })
@@ -241,10 +241,10 @@ test('on a touch screen every field is 16px, so tapping one does not zoom the pa
   await phone.click('button:text-is("Log in")')
   await phone.waitForURL(`${hub}/`)
   await phone.goto(`${hub}/new-node`)
-  assert.equal(await fontSize(phone, 'input[name="nodeName"]'), '16px')
+  assert.equal(await fontSize(phone, 'input[name="name"]'), '16px')
   await phone.close()
   await page.goto(`${hub}/new-node`)
-  assert.equal(await fontSize(page, 'input[name="nodeName"]'), '13.5px')
+  assert.equal(await fontSize(page, 'input[name="name"]'), '13.5px')
   await page.goto(`${hub}/`)
 })
 

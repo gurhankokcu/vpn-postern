@@ -76,6 +76,18 @@ export function removeNode(n: number) {
   return 'removed'
 }
 
+export function renameNode(n: number, name: string) {
+  const data = load()
+  if (!data.nodes.some((node) => node.n === n)) {
+    return 'missing'
+  }
+  if (data.nodes.some((node) => node.n !== n && node.name.toLowerCase() === name.toLowerCase())) {
+    return 'taken'
+  }
+  save({ ...data, nodes: data.nodes.map((node) => (node.n === n ? { ...node, name } : node)) })
+  return 'renamed'
+}
+
 export function unjoined(n: number) {
   return live(load().joins).some((join) => join.n === n)
 }

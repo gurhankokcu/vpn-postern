@@ -136,7 +136,7 @@ export function treePage({ hubPort, nodes, joins, devices, message = '', modal =
     const acts = (waiting.has(node.n) ? link(`/nodes/${node.n}/join`, 'Join command', 'join') : '')
       + (list ? link(`/nodes/${node.n}/new-device`, 'Add device', 'add') : '')
       + removeButton(`/nodes/${node.n}/remove`, removeNodeQuestion(node, list))
-    rows.push(row(list ? '' : 'faint', [last ? 'elbow' : 'tee'], `${dot(status)}<b>${escapeHtml(node.name)}</b>`, address(node), `<span class="value">${node.port}${link(`/nodes/${node.n}/port`, 'Change port', 'edit')}</span>`, acts))
+    rows.push(row(list ? '' : 'faint', [last ? 'elbow' : 'tee'], `${dot(status)}<b>${escapeHtml(node.name)}</b>${link(`/nodes/${node.n}/name`, 'Rename', 'edit')}`, address(node), `<span class="value">${node.port}${link(`/nodes/${node.n}/port`, 'Change port', 'edit')}</span>`, acts))
     if (!list) {
       rows.push(aside([pass, 'elbow'], waiting.has(node.n) ? 'Waiting to join. Its devices show here once it does.' : 'Offline. Its devices show here once it is back.'))
     } else if (!list.length) {
@@ -172,9 +172,17 @@ function buttons(label: string) {
 export function addNodeModal(port: number | string, message = '', name = '') {
   return modal('Add node', `<form class="form" method="post" action="/nodes">
 ${message && `<div class="note">${message}</div>`}
-<label>Name<span class="field"><input name="nodeName" value="${escapeHtml(name)}" autocomplete="off" autofocus required></span><small>1 to 32 letters, digits, - or _, with single spaces between words.</small></label>
+<label>Name<span class="field"><input name="name" value="${escapeHtml(name)}" autocomplete="off" autofocus required></span><small>1 to 32 letters, digits, - or _. No spaces.</small></label>
 <label>Port<span class="field"><input name="port" value="${escapeHtml(String(port))}" inputmode="numeric" autocomplete="off" required></span><small>The UDP port on the hub that this node's devices dial.</small></label>
 ${buttons('Add node')}
+</form>`)
+}
+
+export function nameModal(node: Node, message = '', name = node.name) {
+  return modal(`Rename ${escapeHtml(node.name)}`, `<form class="form" method="post" action="/nodes/${node.n}/name">
+${message && `<div class="note">${message}</div>`}
+<label>Name<span class="field"><input name="name" value="${escapeHtml(name)}" autocomplete="off" autofocus required></span><small>1 to 32 letters, digits, - or _. No spaces.</small></label>
+${buttons('Save name')}
 </form>`)
 }
 
@@ -190,7 +198,7 @@ ${code(command)}
 export function addDeviceModal(node: Node, message = '', name = '') {
   return modal(`Add a device to ${escapeHtml(node.name)}`, `<form class="form" method="post" action="/nodes/${node.n}/devices">
 ${message && `<div class="note">${message}</div>`}
-<label>Name<span class="field"><input name="deviceName" value="${escapeHtml(name)}" autocomplete="off" autofocus required></span><small>1 to 32 letters, digits, - or _. No spaces.</small></label>
+<label>Name<span class="field"><input name="name" value="${escapeHtml(name)}" autocomplete="off" autofocus required></span><small>1 to 32 letters, digits, - or _. No spaces.</small></label>
 ${buttons('Add device')}
 </form>`)
 }

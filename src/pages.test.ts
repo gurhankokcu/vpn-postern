@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import type { TreeView } from './pages.ts'
 
 process.env.POSTERN_DIR = mkdtempSync(join(tmpdir(), 'postern-'))
-const { addDeviceModal, addNodeModal, deviceModal, hubPortModal, joinModal, loginPage, notFoundPage, portModal, treePage } = await import('./pages.ts')
+const { addDeviceModal, addNodeModal, deviceModal, hubPortModal, joinModal, loginPage, nameModal, notFoundPage, portModal, treePage } = await import('./pages.ts')
 
 const home = { name: 'home', n: 2, port: 51822, publicKey: 'home' }
 const work = { name: 'work', n: 3, port: 443, publicKey: 'work' }
@@ -124,7 +124,7 @@ test('a modal opens over the page, named by its heading, closing back to the tre
 test('add node asks for a name and a port, prefilled, posting to /nodes', () => {
   const html = addNodeModal(51824)
   assert.match(html, /<form class="form" method="post" action="\/nodes">/)
-  assert.match(html, /<input name="nodeName" value="" autocomplete="off" autofocus required>/)
+  assert.match(html, /<input name="name" value="" autocomplete="off" autofocus required>/)
   assert.match(html, /<input name="port" value="51824" inputmode="numeric" autocomplete="off" required><\/span><small>The UDP port on the hub that this node's devices dial\.<\/small>/)
   assert.match(html, /<a class="btn ghost" href="\/">Cancel<\/a><button class="btn primary">Add node<\/button>/)
   assert.doesNotMatch(html, /class="note"/)
@@ -133,7 +133,7 @@ test('add node asks for a name and a port, prefilled, posting to /nodes', () => 
 test('add node shows its message and what was typed, escaped', () => {
   const html = addNodeModal('4"3', 'Bad name.', `"><b>`)
   assert.match(html, /<div class="note">Bad name\.<\/div>/)
-  assert.match(html, /name="nodeName" value="&#34;&#62;&#60;b&#62;"/)
+  assert.match(html, /name="name" value="&#34;&#62;&#60;b&#62;"/)
   assert.match(html, /name="port" value="4&#34;3"/)
 })
 
@@ -150,7 +150,7 @@ test('the join command sits in a code box, with the minutes left', () => {
 test('add device asks only for a name, posting to its node', () => {
   const html = addDeviceModal(home, 'Taken.', 'mum')
   assert.match(html, /<form class="form" method="post" action="\/nodes\/2\/devices">\n<div class="note">Taken\.<\/div>/)
-  assert.match(html, /<input name="deviceName" value="mum" autocomplete="off" autofocus required>/)
+  assert.match(html, /<input name="name" value="mum" autocomplete="off" autofocus required>/)
   assert.doesNotMatch(html, /name="port"/)
 })
 
@@ -158,6 +158,29 @@ test('a node\'s port can be changed, online or not', () => {
   const html = treePage(both)
   assert.match(rowOf(html, 'work'), /<a class="btn ghost act" href="\/nodes\/3\/port" aria-label="Change port">/)
   assert.doesNotMatch(rowOf(html, 'laptop'), /Change port/)
+})
+
+test('a node can be renamed, online or not', () => {
+  const html = treePage(both)
+  assert.match(rowOf(html, 'home'), /<b>home<\/b><a class="btn ghost act" href="\/nodes\/2\/name" aria-label="Rename">/)
+  assert.match(rowOf(html, 'work'), /<b>work<\/b><a class="btn ghost act" href="\/nodes\/3\/name" aria-label="Rename">/)
+  assert.doesNotMatch(rowOf(html, 'Hub'), /Rename/)
+})
+
+test('renaming a node asks for its name, prefilled, posting to it', () => {
+  const html = nameModal(home)
+  assert.match(html, /<h2 id="modal-title">Rename home<\/h2>/)
+  assert.match(html, /<form class="form" method="post" action="\/nodes\/2\/name">/)
+  assert.match(html, /<input name="name" value="home" autocomplete="off" autofocus required><\/span><small>1 to 32 letters, digits, - or _\. No spaces\.<\/small>/)
+  assert.match(html, /<a class="btn ghost" href="\/">Cancel<\/a><button class="btn primary">Save name<\/button>/)
+  assert.doesNotMatch(html, /class="note"/)
+})
+
+test('renaming a node shows its message and what was typed, escaped', () => {
+  const html = nameModal({ ...home, name: '<b>' }, 'Taken.', 'a"b')
+  assert.match(html, /<div class="note">Taken\.<\/div>/)
+  assert.match(html, /name="name" value="a&#34;b"/)
+  assert.match(html, /<h2 id="modal-title">Rename &#60;b&#62;<\/h2>/)
 })
 
 test('changing a port asks for it, prefilled, posting to its node', () => {

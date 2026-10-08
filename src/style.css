@@ -207,6 +207,8 @@ main > .note { margin-bottom: 14px; }
 .tree td.port .value { position: relative; }
 .tree td.port .act { position: absolute; top: 50%; left: 100%; margin: -13px 0 0 6px; padding: 5px; }
 .tree td.port .act svg { width: 13px; height: 13px; }
+.tree td.name .act { margin-left: -4px; padding: 5px; }
+.tree td.name .act svg { width: 13px; height: 13px; }
 .tree td.acts { width: 1%; padding-right: 12px; text-align: right; white-space: nowrap; }
 .tree td.acts form { display: inline; }
 

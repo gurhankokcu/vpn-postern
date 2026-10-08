@@ -18,17 +18,17 @@ function peers() {
 }
 
 test('the tablet adds a node and sees it listed', async () => {
-  assert.equal(await addNode(cookie, 'Home Pi'), 303)
-  assert.match(await row(cookie, 'Home Pi'), /<i class="dot offline" role="img" aria-label="offline"><\/i><b>Home Pi<\/b><\/span><\/div><\/td>\n<td class="mono address">10\.99\.0\.2<\/td>\n<td class="mono port"><span class="value">51822<a /)
+  assert.equal(await addNode(cookie, 'Home_Pi'), 303)
+  assert.match(await row(cookie, 'Home_Pi'), /<i class="dot offline" role="img" aria-label="offline"><\/i><b>Home_Pi<\/b><a class="btn ghost act" href="\/nodes\/2\/name" aria-label="Rename"><svg [\s\S]*?<\/svg><\/a><\/span><\/div><\/td>\n<td class="mono address">10\.99\.0\.2<\/td>\n<td class="mono port"><span class="value">51822<a /)
 })
 
 test('the node is a live postern0 peer at 10.99.0.2', async () => {
-  assert.equal(await peers(), `${await publicKey('Home Pi')}\t10.99.0.2/32`)
+  assert.equal(await peers(), `${await publicKey('Home_Pi')}\t10.99.0.2/32`)
 })
 
 test('a second node takes 10.99.0.3', async () => {
-  assert.equal(await addNode(cookie, 'Work Pi'), 303)
-  assert.equal(await peers(), `${await publicKey('Home Pi')}\t10.99.0.2/32\n${await publicKey('Work Pi')}\t10.99.0.3/32`)
+  assert.equal(await addNode(cookie, 'Work_Pi'), 303)
+  assert.equal(await peers(), `${await publicKey('Home_Pi')}\t10.99.0.2/32\n${await publicKey('Work_Pi')}\t10.99.0.3/32`)
 })
 
 test('postern0.conf keeps the interface and both peers, readable by root alone', async () => {
@@ -36,8 +36,8 @@ test('postern0.conf keeps the interface and both peers, readable by root alone',
   assert.match(conf, /^Address = 10\.99\.0\.1\/24$/m)
   assert.match(conf, /^ListenPort = 443$/m)
   assert.ok(conf.includes(`PrivateKey = ${await output('hub', 'wg show postern0 private-key')}\n`))
-  assert.ok(conf.includes(`[Peer]\nPublicKey = ${await publicKey('Home Pi')}\nAllowedIPs = 10.99.0.2/32`))
-  assert.ok(conf.includes(`[Peer]\nPublicKey = ${await publicKey('Work Pi')}\nAllowedIPs = 10.99.0.3/32`))
+  assert.ok(conf.includes(`[Peer]\nPublicKey = ${await publicKey('Home_Pi')}\nAllowedIPs = 10.99.0.2/32`))
+  assert.ok(conf.includes(`[Peer]\nPublicKey = ${await publicKey('Work_Pi')}\nAllowedIPs = 10.99.0.3/32`))
   assert.equal(await output('hub', 'stat -c %a /etc/wireguard/postern0.conf'), '600')
 })
 

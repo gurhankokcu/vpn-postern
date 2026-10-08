@@ -2,21 +2,12 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { field, fields } from './fields.ts'
 
-test('a device name is 1 to 32 letters, digits, - or _, with no spaces', () => {
+test('a name is 1 to 32 letters, digits, - or _, with no spaces', () => {
   for (const name of ['a', 'mum', 'Dads-Phone', 'tablet_2', 'x'.repeat(32)]) {
-    assert.match(name, fields.deviceName)
+    assert.match(name, fields.name)
   }
-  for (const name of ['', ' ', 'mum phone', ' mum', 'mum ', '../mum', 'mum.conf', 'café', 'mum\n', 'x'.repeat(33)]) {
-    assert.doesNotMatch(name, fields.deviceName)
-  }
-})
-
-test('a node name is 1 to 32 letters, digits, - or _, with single spaces between words', () => {
-  for (const name of ['a', 'home', 'Mum and Dad Pi', 'work-pi_2', 'x'.repeat(32)]) {
-    assert.match(name, fields.nodeName)
-  }
-  for (const name of ['', ' ', ' home', 'home ', 'Mum  Dad', "Mum & Dad's <Pi>", 'café', 'home\n', 'x'.repeat(33)]) {
-    assert.doesNotMatch(name, fields.nodeName)
+  for (const name of ['', ' ', 'mum phone', ' mum', 'mum ', '../mum', 'mum.conf', "Mum & Dad's <Pi>", 'café', 'mum\n', 'x'.repeat(33)]) {
+    assert.doesNotMatch(name, fields.name)
   }
 })
 

@@ -8,7 +8,7 @@ import { beforeEach, test } from 'node:test'
 process.env.POSTERN_DIR = mkdtempSync(join(tmpdir(), 'postern-'))
 process.env.PATH = `${join(import.meta.dirname, '..', 'dev', 'bin')}:${process.env.PATH}`
 const { load, save } = await import('./data.ts')
-const { addNode, changeHubPort, changePort, dropJoin, findJoin, offlineNodes, portProblem, removeNode, stageScript, switchScript, unstageScript } = await import('./nodes.ts')
+const { addNode, changeHubPort, changePort, dropJoin, findJoin, offlineNodes, portProblem, removeNode, renameNode, stageScript, switchScript, unstageScript } = await import('./nodes.ts')
 const { ruleset } = await import('./nft.ts')
 const log = join(process.env.POSTERN_DIR, 'wg.log')
 const table = join(process.env.POSTERN_DIR, 'nft')
@@ -43,11 +43,11 @@ test('a node takes the lowest free n', () => {
 })
 
 test('a name already in use, in any case, is refused', () => {
-  assert.equal(addNode('Home Pi'), 'added')
-  assert.equal(addNode('Home Pi'), 'taken')
-  assert.equal(addNode('home pi'), 'taken')
-  assert.equal(addNode('HOME PI'), 'taken')
-  assert.deepEqual(load().nodes.map((node) => node.name), ['Home Pi'])
+  assert.equal(addNode('Home-Pi'), 'added')
+  assert.equal(addNode('Home-Pi'), 'taken')
+  assert.equal(addNode('home-pi'), 'taken')
+  assert.equal(addNode('HOME-PI'), 'taken')
+  assert.deepEqual(load().nodes.map((node) => node.name), ['Home-Pi'])
 })
 
 test('254 is the last n', () => {
@@ -214,6 +214,32 @@ test('a removed node frees its n and its name', () => {
   removeNode(2)
   assert.equal(addNode('home'), 'added')
   assert.deepEqual(load().nodes.map((node) => [node.name, node.n]), [['work', 3], ['home', 2]])
+})
+
+test('renaming a node saves its new name, keeping the rest', () => {
+  addNode('home')
+  addNode('work')
+  assert.equal(renameNode(2, 'London-Pi'), 'renamed')
+  assert.deepEqual(load().nodes.map((node) => [node.name, node.n]), [['London-Pi', 2], ['work', 3]])
+})
+
+test('a node may change only the case of its own name', () => {
+  addNode('home')
+  assert.equal(renameNode(2, 'Home'), 'renamed')
+  assert.equal(load().nodes[0].name, 'Home')
+})
+
+test('a name another node has, in any case, is refused', () => {
+  addNode('home')
+  addNode('work')
+  assert.equal(renameNode(2, 'WORK'), 'taken')
+  assert.deepEqual(load().nodes.map((node) => node.name), ['home', 'work'])
+})
+
+test('renaming an unknown node changes nothing', () => {
+  addNode('home')
+  assert.equal(renameNode(9, 'work'), 'missing')
+  assert.deepEqual(load().nodes.map((node) => node.name), ['home'])
 })
 
 test('removing an unknown node runs no wg and no nft, and changes nothing', () => {

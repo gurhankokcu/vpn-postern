@@ -82,7 +82,7 @@ test('work-pi then joins, dialing the hub\'s new port, and its devices dial the 
   const { n: w } = await node('work-pi')
   assert.match(await output('work-pi', 'cat /etc/wireguard/postern0.conf'), /^Endpoint = hub:4500$/m)
   assert.equal((await sh('hub', `ping -c 3 -W 5 10.99.0.${w}`)).code, 0)
-  assert.equal(await post(`/nodes/${w}/devices`, cookie, 'deviceName=desk'), 303)
+  assert.equal(await post(`/nodes/${w}/devices`, cookie, 'name=desk'), 303)
   assert.match(await page(`/nodes/${w}/devices/desk.conf`, cookie), /^Endpoint = hub:1195$/m)
   assert.equal(await post(`/nodes/${w}/remove`, cookie, ''), 303)
 })

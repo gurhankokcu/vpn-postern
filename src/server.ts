@@ -8,8 +8,8 @@ import { dir, live, load, type Node } from './data.ts'
 import { addDevice, listDevices, qr, removeDevice, showDevice } from './devices.ts'
 import { field, fields } from './fields.ts'
 import { joinScript } from './join.ts'
-import { addNode, changeHubPort, changePort, dropJoin, findJoin, nextPort, offlineNodes, removeNode, unjoined } from './nodes.ts'
-import { addDeviceModal, addNodeModal, deviceModal, hubPortModal, joinModal, loginPage, notFoundPage, portModal, treePage } from './pages.ts'
+import { addNode, changeHubPort, changePort, dropJoin, findJoin, nextPort, offlineNodes, removeNode, renameNode, unjoined } from './nodes.ts'
+import { addDeviceModal, addNodeModal, deviceModal, hubPortModal, joinModal, loginPage, nameModal, notFoundPage, portModal, treePage } from './pages.ts'
 import { hubKey, hubPort, online } from './wg.ts'
 
 const css = readFileSync(join(import.meta.dirname, 'style.css'))
@@ -136,11 +136,11 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
   }
   if (route === 'POST /nodes') {
     const params = await form(req)
-    const name = field(params, 'nodeName')
+    const name = field(params, 'name')
     const port = field(params, 'port')
-    const again = (status: number, message: string) => tree(addNodeModal(params.get('port') ?? '', message, params.get('nodeName') ?? '')).then((html) => send(res, status, html))
+    const again = (status: number, message: string) => tree(addNodeModal(params.get('port') ?? '', message, params.get('name') ?? '')).then((html) => send(res, status, html))
     if (name === null) {
-      return again(400, 'A node name is 1 to 32 letters, digits, - or _, with single spaces between words.')
+      return again(400, 'A node name is 1 to 32 letters, digits, - or _.')
     }
     const result = port === null ? 'port-invalid' : addNode(name, Number(port))
     if (result === 'port-invalid') {
@@ -194,6 +194,25 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     }
     return redirect(res, '/')
   }
+  const [, nameN] = route.match(/^GET \/nodes\/(\d+)\/name$/) ?? []
+  const naming = findNode(nameN)
+  if (naming) {
+    return send(res, 200, await tree(nameModal(naming)))
+  }
+  const [, renameN] = route.match(/^POST \/nodes\/(\d+)\/name$/) ?? []
+  const renaming = findNode(renameN)
+  if (renaming) {
+    const params = await form(req)
+    const name = field(params, 'name')
+    const again = async (status: number, message: string) => send(res, status, await tree(nameModal(renaming, message, params.get('name') ?? '')))
+    if (name === null) {
+      return again(400, 'A node name is 1 to 32 letters, digits, - or _.')
+    }
+    if (renameNode(renaming.n, name) === 'taken') {
+      return again(409, 'Another node already has that name.')
+    }
+    return redirect(res, '/')
+  }
   const [, openN] = route.match(/^GET \/nodes\/(\d+)\/new-device$/) ?? []
   const opening = findNode(openN)
   if (opening) {
@@ -203,8 +222,8 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
   const adding = findNode(addN)
   if (adding) {
     const params = await form(req)
-    const name = field(params, 'deviceName')
-    const again = (status: number, message: string) => tree(addDeviceModal(adding, message, params.get('deviceName') ?? '')).then((html) => send(res, status, html))
+    const name = field(params, 'name')
+    const again = (status: number, message: string) => tree(addDeviceModal(adding, message, params.get('name') ?? '')).then((html) => send(res, status, html))
     if (name === null) {
       return again(400, 'A device name is 1 to 32 letters, digits, - or _.')
     }
@@ -221,7 +240,7 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     return redirect(res, `/nodes/${adding.n}/devices/${name}`)
   }
   const [, removeN, removeName = ''] = route.match(/^POST \/nodes\/(\d+)\/devices\/([^/]+)\/remove$/) ?? []
-  const removing = fields.deviceName.test(removeName) ? findNode(removeN) : undefined
+  const removing = fields.name.test(removeName) ? findNode(removeN) : undefined
   if (removing) {
     const result = await removeDevice(removing, removeName)
     if (result === 'missing') {
@@ -233,7 +252,7 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     return redirect(res, '/')
   }
   const [, showN, name = '', download] = route.match(/^GET \/nodes\/(\d+)\/devices\/([^/]+?)(\.conf)?$/) ?? []
-  const showing = fields.deviceName.test(name) ? findNode(showN) : undefined
+  const showing = fields.name.test(name) ? findNode(showN) : undefined
   if (showing) {
     const conf = await showDevice(showing, name)
     if (conf === 'missing') {

@@ -249,32 +249,32 @@ test('add node opens over the tree with the next free port filled in', async () 
 })
 
 test('adding a node saves it with its port and opens its join command', async () => {
-  const res = await add(await session(), 'nodeName=Mum%20and%20Dad%20Pi&port=443')
+  const res = await add(await session(), 'name=Mum-and-Dad-Pi&port=443')
   assert.equal(res.status, 303)
   assert.equal(res.headers.get('location'), '/nodes/2/join')
-  assert.deepEqual(load().nodes.map((node) => [node.name, node.n, node.port]), [['home', 1, 51821], ['Mum and Dad Pi', 2, 443]])
+  assert.deepEqual(load().nodes.map((node) => [node.name, node.n, node.port]), [['home', 1, 51821], ['Mum-and-Dad-Pi', 2, 443]])
   assert.deepEqual(load().joins.map((join) => join.n), [2])
 })
 
 test('a node name against the rule is refused with a note, adding nothing', async () => {
   const cookie = await session()
-  for (const body of ['port=443', 'nodeName=&port=443', 'nodeName=%20work%20&port=443', `nodeName=${encodeURIComponent("Mum & Dad's <Pi>")}&port=443`]) {
+  for (const body of ['port=443', 'name=&port=443', 'name=%20work%20&port=443', 'name=Work%20Pi&port=443', `name=${encodeURIComponent("Mum & Dad's <Pi>")}&port=443`]) {
     const res = await add(cookie, body)
     assert.equal(res.status, 400)
-    assert.match(await res.text(), /<div class="note">A node name is 1 to 32 letters, digits, - or _, with single spaces between words\.<\/div>/)
+    assert.match(await res.text(), /<div class="note">A node name is 1 to 32 letters, digits, - or _\.<\/div>/)
   }
   assert.deepEqual(load().nodes, nodes)
 })
 
 test('a refused node keeps what was typed in its form, escaped', async () => {
-  const html = await (await add(await session(), `nodeName=${encodeURIComponent("Mum & Dad's <Pi>")}&port=4%2243`)).text()
-  assert.match(html, /<input name="nodeName" value="Mum &#38; Dad&#39;s &#60;Pi&#62;"/)
+  const html = await (await add(await session(), `name=${encodeURIComponent("Mum & Dad's <Pi>")}&port=4%2243`)).text()
+  assert.match(html, /<input name="name" value="Mum &#38; Dad&#39;s &#60;Pi&#62;"/)
   assert.match(html, /<input name="port" value="4&#34;43"/)
 })
 
 test('a port against the rule is refused with a note, adding nothing', async () => {
   const cookie = await session()
-  for (const body of ['nodeName=work', 'nodeName=work&port=', 'nodeName=work&port=0', 'nodeName=work&port=65536', 'nodeName=work&port=4.4', 'nodeName=work&port=x']) {
+  for (const body of ['name=work', 'name=work&port=', 'name=work&port=0', 'name=work&port=65536', 'name=work&port=4.4', 'name=work&port=x']) {
     const res = await add(cookie, body)
     assert.equal(res.status, 400, body)
     assert.match(await res.text(), /<div class="note">A port is a whole number from 1 to 65535\.<\/div>/)
@@ -285,7 +285,7 @@ test('a port against the rule is refused with a note, adding nothing', async () 
 test('a port the hub or another node uses is refused with a note', async () => {
   const cookie = await session()
   for (const port of [51820, 51821]) {
-    const res = await add(cookie, `nodeName=work&port=${port}`)
+    const res = await add(cookie, `name=work&port=${port}`)
     assert.equal(res.status, 409)
     assert.match(await res.text(), /<div class="note">The hub or another node already uses that port\.<\/div>/)
   }
@@ -293,18 +293,18 @@ test('a port the hub or another node uses is refused with a note', async () => {
 })
 
 test('a node name already in use, in any case, is refused with a note, adding nothing', async () => {
-  const res = await add(await session(), 'nodeName=HOME&port=443')
+  const res = await add(await session(), 'name=HOME&port=443')
   assert.equal(res.status, 409)
   const html = await res.text()
   assert.match(html, /<div class="note">Another node already has that name\.<\/div>/)
-  assert.match(html, /<input name="nodeName" value="HOME"/)
+  assert.match(html, /<input name="name" value="HOME"/)
   assert.deepEqual(load().nodes, nodes)
 })
 
 test('a node beyond the last address is refused with a note, adding nothing', async () => {
   const full = Array.from({ length: 253 }, (_, i) => ({ name: `node${i + 2}`, n: i + 2, port: 51822 + i, publicKey: 'key' }))
   save({ password: hash(password), nodes: full, joins: [] })
-  const res = await add(await session(), 'nodeName=extra&port=443')
+  const res = await add(await session(), 'name=extra&port=443')
   assert.equal(res.status, 409)
   assert.match(await res.text(), /<div class="note">All 253 node addresses are in use\.<\/div>/)
   assert.deepEqual(load().nodes, full)
@@ -378,7 +378,7 @@ test('add device opens over the tree for its node', async () => {
 test('adding a device writes it to the node, dialing its port, and shows its QR code', async () => {
   save({ password: hash(password), nodes: [{ ...nodes[0], port: 443 }], joins: [] })
   answer(wg0)
-  const res = await addDevice(await session(), 'deviceName=tablet')
+  const res = await addDevice(await session(), 'name=tablet')
   assert.equal(res.status, 303)
   assert.equal(res.headers.get('location'), '/nodes/1/devices/tablet')
   const log = readFileSync(join(dir, 'ssh.log'), 'utf8')
@@ -388,7 +388,7 @@ test('adding a device writes it to the node, dialing its port, and shows its QR 
 
 test('a device name against the rule is refused with a note, reaching no node', async () => {
   const cookie = await session()
-  for (const body of ['', 'deviceName=', 'deviceName=mum%20phone', 'deviceName=..%2Fmum']) {
+  for (const body of ['', 'name=', 'name=mum%20phone', 'name=..%2Fmum']) {
     answer(wg0)
     const res = await addDevice(cookie, body)
     assert.equal(res.status, 400)
@@ -399,27 +399,27 @@ test('a device name against the rule is refused with a note, reaching no node', 
 
 test('a device name already on the node, in any case, is refused with a note', async () => {
   answer(wg0)
-  const res = await addDevice(await session(), 'deviceName=MUM')
+  const res = await addDevice(await session(), 'name=MUM')
   assert.equal(res.status, 409)
   const html = await res.text()
   assert.match(html, /<div class="note">Another device on this node already has that name\.<\/div>/)
-  assert.match(html, /<input name="deviceName" value="MUM"/)
+  assert.match(html, /<input name="name" value="MUM"/)
 })
 
 test('a device beyond the last address is refused with a note', async () => {
   answer(`${wg0}${Array.from({ length: 253 }, (_, i) => `\n[Peer]\nAllowedIPs = 10.66.66.${i + 2}/32\n`).join('')}`)
-  const res = await addDevice(await session(), 'deviceName=tablet')
+  const res = await addDevice(await session(), 'name=tablet')
   assert.equal(res.status, 409)
   assert.match(await res.text(), /<div class="note">All 253 device addresses on this node are in use\.<\/div>/)
 })
 
 test('adding a device to an offline node says so in its form, trying it only once', async () => {
   answer('', 255)
-  const res = await addDevice(await session(), 'deviceName=tablet')
+  const res = await addDevice(await session(), 'name=tablet')
   assert.equal(res.status, 503)
   const html = await res.text()
   assert.match(html, /<div class="note">home is offline\.<\/div>/)
-  assert.match(html, /<input name="deviceName" value="tablet"/)
+  assert.match(html, /<input name="name" value="tablet"/)
   assert.equal(readFileSync(join(dir, 'ssh.log'), 'utf8').match(/^ssh /gm)?.length, 1)
 })
 
@@ -574,6 +574,55 @@ function changeHubPort(cookie: string, body: string) {
     body,
   })
 }
+
+function rename(cookie: string, body: string, n = 1) {
+  return request(`/nodes/${n}/name`, {
+    method: 'POST',
+    headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' },
+    body,
+  })
+}
+
+test('renaming a node opens over the tree, prefilled', async () => {
+  const html = await page('/nodes/1/name')
+  assert.match(html, /<h2 id="modal-title">Rename home<\/h2>/)
+  assert.match(html, /<input name="name" value="home"/)
+  assert.equal((await request('/nodes/9/name', { headers: { cookie: await session() } })).status, 404)
+})
+
+test('renaming a node saves its name, reaching no node, and goes back to the tree', async () => {
+  const res = await rename(await session(), 'name=London-Pi')
+  assert.equal(res.status, 303)
+  assert.equal(res.headers.get('location'), '/')
+  assert.deepEqual(load().nodes.map((node) => node.name), ['London-Pi'])
+  assert.equal(existsSync(join(dir, 'ssh.log')), false)
+})
+
+test('a new node name against the rule is refused with a note, keeping what was typed', async () => {
+  const cookie = await session()
+  for (const [body, typed] of [['', ''], ['name=', ''], ['name=%20home', ' home'], ['name=London%20Pi', 'London Pi'], ['name=%3CPi%3E', '&#60;Pi&#62;']]) {
+    const res = await rename(cookie, body)
+    assert.equal(res.status, 400, body)
+    const html = await res.text()
+    assert.match(html, /<div class="note">A node name is 1 to 32 letters, digits, - or _\.<\/div>/)
+    assert.ok(html.includes(`<input name="name" value="${typed}"`), body)
+  }
+  assert.deepEqual(load().nodes, nodes)
+})
+
+test('a node name another node has, in any case, is refused with a note', async () => {
+  save({ password: hash(password), nodes: [...nodes, { name: 'work', n: 2, port: 51822, publicKey: 'work' }], joins: [] })
+  const res = await rename(await session(), 'name=WORK')
+  assert.equal(res.status, 409)
+  const html = await res.text()
+  assert.match(html, /<div class="note">Another node already has that name\.<\/div>/)
+  assert.match(html, /<input name="name" value="WORK"/)
+  assert.deepEqual(load().nodes.map((node) => node.name), ['home', 'work'])
+})
+
+test('renaming an unknown node is not found', async () => {
+  assert.equal((await rename(await session(), 'name=work', 9)).status, 404)
+})
 
 test('the hub\'s port opens over the tree, prefilled', async () => {
   online()

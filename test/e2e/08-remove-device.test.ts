@@ -23,7 +23,7 @@ function reachesCamera(machine: string) {
 }
 
 test('the tablet and the phone both reach home-pi\'s LAN through their own devices', async () => {
-  assert.equal(await post(`/nodes/${n}/devices`, cookie, 'deviceName=tablet'), 303)
+  assert.equal(await post(`/nodes/${n}/devices`, cookie, 'name=tablet'), 303)
   const tablet = await page(`/nodes/${n}/devices/tablet.conf`, cookie)
   for (const [machine, conf] of [['tablet', tablet], ['phone', phone]]) {
     const setup = await connect(machine, conf)
@@ -52,6 +52,6 @@ test('the phone\'s .conf is gone and a second remove is not found', async () => 
 
 test('the phone\'s address goes to the next device added', async () => {
   const x = phone.match(/^Address = (10\.66\.66\.\d+)\/32$/m)?.[1]
-  assert.equal(await post(`/nodes/${n}/devices`, cookie, 'deviceName=laptop'), 303)
+  assert.equal(await post(`/nodes/${n}/devices`, cookie, 'name=laptop'), 303)
   assert.match(await page(`/nodes/${n}/devices/laptop.conf`, cookie), new RegExp(`^Address = ${x?.replaceAll('.', '\\.')}/32$`, 'm'))
 })

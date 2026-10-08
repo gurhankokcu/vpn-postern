@@ -100,7 +100,7 @@ export async function post(path: string, cookie: string, ...data: string[]) {
 // As the admin would: open Add node and keep the port it suggests.
 export async function addNode(cookie: string, name: string) {
   const port = (await page('/new-node', cookie)).match(/name="port" value="(\d+)"/)?.[1]
-  return post('/nodes', cookie, `nodeName=${name}`, `port=${port}`)
+  return post('/nodes', cookie, `name=${name}`, `port=${port}`)
 }
 
 export async function joinCommand(cookie: string, name: string) {
