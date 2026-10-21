@@ -31,6 +31,17 @@ test('the join script turns on forwarding, now and on every boot', () => {
   assert.match(script, /^  echo 'net\.ipv4\.ip_forward = 1' > \/etc\/sysctl\.d\/99-postern\.conf\n  sysctl -q -p \/etc\/sysctl\.d\/99-postern\.conf$/m)
 })
 
+test('the join script has the hardware watchdog reboot the node when it hangs for 15 seconds', () => {
+  assert.ok(script.includes(`
+  mkdir -p /etc/systemd/system.conf.d
+  cat > /etc/systemd/system.conf.d/99-postern.conf <<'EOF'
+[Manager]
+RuntimeWatchdogSec=15
+EOF
+  systemctl daemon-reexec
+`))
+})
+
 test('the join script writes postern0.conf for node n, dialing the hub on its port', () => {
   assert.ok(script.includes(`cat > /etc/wireguard/postern0.conf <<'EOF'
 [Interface]

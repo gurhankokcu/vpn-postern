@@ -15,6 +15,12 @@ main() {
   apt-get install -y -q wireguard-tools openssh-server nftables
   echo 'net.ipv4.ip_forward = 1' > /etc/sysctl.d/99-postern.conf
   sysctl -q -p /etc/sysctl.d/99-postern.conf
+  mkdir -p /etc/systemd/system.conf.d
+  cat > /etc/systemd/system.conf.d/99-postern.conf <<'EOF'
+[Manager]
+RuntimeWatchdogSec=15
+EOF
+  systemctl daemon-reexec
 
   umask 077
   mkdir -p /etc/wireguard /root/.ssh
