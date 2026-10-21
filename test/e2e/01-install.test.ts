@@ -54,3 +54,7 @@ test('the password, spaces and all, logs in and shows the nodes', async () => {
   assert.equal(status, 303)
   assert.match(await page('/', cookie), /No nodes yet/)
 })
+
+test('the login page shows the installed version', async () => {
+  assert.match(await page('/login'), /<b>VPN <span>Postern<\/span><\/b><small>v1\.2\.3<\/small>/)
+})

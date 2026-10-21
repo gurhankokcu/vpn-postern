@@ -20,6 +20,7 @@ jobs:
       - run: npm test
       - uses: docker/setup-docker-action@v5
       - run: npm run e2e
+      - run: npm pkg set version="${GITHUB_REF_NAME#v}"
       - run: tar --exclude='*.test.ts' -cz package.json src > postern.tar.gz
       - run: gh release create "$GITHUB_REF_NAME" postern.tar.gz install.sh --generate-notes
         env:

@@ -1,5 +1,11 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { address, type Join, type Node } from './data.ts'
 import type { Device } from './devices.ts'
+
+// A release writes its version into package.json.
+const { version } = JSON.parse(readFileSync(join(import.meta.dirname, '..', 'package.json'), 'utf8'))
+const release = version ? `v${version}` : 'dev'
 
 const mark = `<svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
 <path d="M4 28V11l12-7 12 7v17" stroke="url(#g)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
@@ -10,7 +16,7 @@ const mark = `<svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
 </linearGradient></defs>
 </svg>`
 
-const brand = `<div class="brand">${mark}<b>VPN <span>Postern</span></b></div>`
+const brand = `<div class="brand">${mark}<b>VPN <span>Postern</span></b><small>${release}</small></div>`
 
 // Lucide icons (https://lucide.dev), ISC licence, Copyright (c) 2026 Lucide Icons and Contributors.
 const icons = {

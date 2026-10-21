@@ -62,6 +62,7 @@ main { max-width: 960px; margin: 0 auto; padding: 26px; }
 .brand svg { width: 26px; height: 26px; flex: none; }
 .brand b { font-size: 15px; font-weight: 600; letter-spacing: -0.02em; }
 .brand span { color: var(--wire); }
+.brand small { color: var(--text-faint); font: 11.5px var(--mono); }
 
 .card {
   overflow: hidden;

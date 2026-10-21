@@ -35,9 +35,9 @@ export function restart(machine: string) {
 }
 
 // Docker Desktop shows the mounted repo as root's, so installs take a copy owned by
-// another user, as a release tarball's files are.
+// another user, as a release tarball's files are, with a version, as a release's package.json has.
 export function stage() {
-  return sh('hub', 'mkdir /srv/postern && cp -r /mnt/project/package.json /mnt/project/src /srv/postern && chown -R 1001:1001 /srv/postern')
+  return sh('hub', `mkdir /srv/postern && cp -r /mnt/project/package.json /mnt/project/src /srv/postern && sed -i '1s/^{$/{\\n  "version": "1.2.3",/' /srv/postern/package.json && chown -R 1001:1001 /srv/postern`)
 }
 
 // install.sh asks on /dev/tty, so it runs under script, which gives it a terminal fed by the answers.

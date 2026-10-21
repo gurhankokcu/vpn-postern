@@ -271,6 +271,12 @@ test('logged-in pages have a log out button', () => {
   }
 })
 
+test('pages show dev for a version outside a release', () => {
+  for (const html of [loginPage(), treePage(empty), notFoundPage()]) {
+    assert.match(html, /<b>VPN <span>Postern<\/span><\/b><small>dev<\/small><\/div>/)
+  }
+})
+
 test('not found page says so', () => {
   const html = notFoundPage()
   assert.match(html, /<title>Not found · VPN Postern<\/title>/)
